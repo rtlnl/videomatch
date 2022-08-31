@@ -3,6 +3,7 @@ import urllib.request
 import logging
 import os
 import hashlib
+import datetime
 
 import pandas
 import gradio as gr
@@ -12,15 +13,9 @@ import imagehash
 from PIL import Image
 
 import numpy as np
-import matplotlib
-matplotlib.use('SVG')
-import matplotlib.pyplot as plt 
-
 import faiss
 
-logging.basicConfig()
-logging.getLogger().setLevel(logging.DEBUG)
-
+FPS = 5
 
 video_directory = tempfile.gettempdir()
 
@@ -33,7 +28,7 @@ def download_video_from_url(url):
         logging.info(f"Downloaded video from {url} to {filename}.")
     return filename
 
-def change_ffmpeg_fps(clip, fps=5):
+def change_ffmpeg_fps(clip, fps=FPS):
     # Hacking the ffmpeg call based on 
     # https://github.com/Zulko/moviepy/blob/master/moviepy/video/io/ffmpeg_reader.py#L126
     import subprocess as sp
@@ -54,7 +49,7 @@ def binary_array_to_uint8s(arr):
     bit_string = ''.join(str(1 * x) for l in arr for x in l)
     return [int(bit_string[i:i+8], 2) for i in range(0, len(bit_string), 8)]
 
-def compute_hashes(clip, fps=5):
+def compute_hashes(clip, fps=FPS):
     for index, frame in enumerate(change_ffmpeg_fps(clip, fps).iter_frames()):
         hashed = np.array(binary_array_to_uint8s(compute_hash(frame).hash), dtype='uint8')
         yield {"frame": 1+index*fps, "hash": hashed}
@@ -80,24 +75,44 @@ def index_hashes_for_video(url):
     logging.info(f"Indexed hashes for {index.ntotal} frames to {filename}.index.")
     return index
 
-def compare_videos(url, target):
+def compare_videos(url, target, MIN_DISTANCE = 3):
+    """" The comparison between the target and the original video will be plotted based
+    on the matches between the target and the original video over time. The matches are determined
+    based on the minimum distance between hashes (as computed by faiss-vectors) before they're considered a match. 
+    
+    args: 
+    - url: url of the source video you want to check for overlap with the target video
+    - target: url of the target video
+    - MIN_DISTANCE: integer representing the minimum distance between hashes on bit-level before its considered a match
+    """
+    # TODO: Fix crash if no matches are found
+
     video_index = index_hashes_for_video(url)
     target_indices = [index_hashes_for_video(x) for x in [target]]
     
-    video_index.make_direct_map()
-    hash_vectors = np.array([video_index.reconstruct(i) for i in range(video_index.ntotal)])
-
+    video_index.make_direct_map() # Make sure the index is indexable
+    hash_vectors = np.array([video_index.reconstruct(i) for i in range(video_index.ntotal)]) # Retrieve original indices
+    
     # The results are returned as a triplet of 1D arrays 
     # lims, D, I, where result for query i is in I[lims[i]:lims[i+1]] 
     # (indices of neighbors), D[lims[i]:lims[i+1]] (distances).
-    lims, D, I = target_indices[0].range_search(hash_vectors, 20)
 
-    min_distance = [D[lims[i]] for i in range(video_index.ntotal)]
+    lims, D, I = target_indices[0].range_search(hash_vectors, MIN_DISTANCE)
+
+    
+
+    x = [(lims[i+1]-lims[i]) * [i] for i in range(hash_vectors.shape[0])]
+    x = [datetime.datetime(1970, 1, 1, 0, 0) + datetime.timedelta(seconds=i/FPS) for j in x for i in j]
+    y = [datetime.datetime(1970, 1, 1, 0, 0) + datetime.timedelta(seconds=i/FPS) for i in I]
 
     import matplotlib.pyplot as plt
 
     ax = plt.figure()
-    plt.plot(min_distance)
+    if x and y:
+        plt.scatter(x, y, s=2*(1-D/MIN_DISTANCE), alpha=1-D/MIN_DISTANCE)
+        plt.xlabel('Time in source video (seconds)')
+        plt.ylabel('Time in target video (seconds)')
+    plt.show()
     return ax
 
 video_urls = ["https://www.dropbox.com/s/8c89a9aba0w8gjg/Ploumen.mp4?dl=1",
@@ -110,11 +125,17 @@ index_iface = gr.Interface(fn=lambda url: index_hashes_for_video(url).ntotal,
                      examples=video_urls, cache_examples=True)
 
 compare_iface = gr.Interface(fn=compare_videos,
-                     inputs=["text", "text"], outputs="plot", 
+                     inputs=["text", "text", gr.Slider(1, 25, 3, step=1)], outputs="plot", 
                      examples=[[x, video_urls[-1]] for x in video_urls[:-1]])
 
 iface = gr.TabbedInterface([index_iface, compare_iface], ["Index", "Compare"])
 
 if __name__ == "__main__":
+    import matplotlib
+    matplotlib.use('SVG')
+
+    logging.basicConfig()
+    logging.getLogger().setLevel(logging.DEBUG)
+
     iface.launch()
     #iface.launch(auth=("test", "test"), share=True, debug=True)
