@@ -4,15 +4,20 @@ import logging
 import os
 import hashlib
 import datetime
+import time
 
 import pandas
 import gradio as gr
 from moviepy.editor import VideoFileClip
 
+import seaborn as sns
+import matplotlib.pyplot as plt
+
 import imagehash
 from PIL import Image
 
 import numpy as np
+import pandas as pd
 import faiss
 
 FPS = 5
@@ -26,6 +31,8 @@ def download_video_from_url(url):
         with (urllib.request.urlopen(url)) as f, open(filename, 'wb') as fileout:
             fileout.write(f.read())
         logging.info(f"Downloaded video from {url} to {filename}.")
+    else:
+        logging.info(f"Skipping downloading from {url} because {filename} already exists.")
     return filename
 
 def change_ffmpeg_fps(clip, fps=FPS):
@@ -51,13 +58,19 @@ def binary_array_to_uint8s(arr):
 
 def compute_hashes(clip, fps=FPS):
     for index, frame in enumerate(change_ffmpeg_fps(clip, fps).iter_frames()):
+        # Each frame is a triplet of size (height, width, 3) of the video since it is RGB
+        # The hash itself is of size (hash_size, hash_size)
+        # The uint8 version of the hash is of size (hash_size * highfreq_factor,) and represents the hash
         hashed = np.array(binary_array_to_uint8s(compute_hash(frame).hash), dtype='uint8')
         yield {"frame": 1+index*fps, "hash": hashed}
 
 def index_hashes_for_video(url):
     filename = download_video_from_url(url)
     if os.path.exists(f'{filename}.index'):
-        return faiss.read_index_binary(f'{filename}.index')
+        logging.info(f"Loading indexed hashes from {filename}.index")
+        binary_index = faiss.read_index_binary(f'{filename}.index') 
+        logging.info(f"Index {filename}.index has in total {binary_index.ntotal} frames")
+        return binary_index
 
     hash_vectors = np.array([x['hash'] for x in compute_hashes(VideoFileClip(filename))])
     logging.info(f"Computed hashes for {hash_vectors.shape} frames.")
@@ -87,33 +100,54 @@ def compare_videos(url, target, MIN_DISTANCE = 3):
     """
     # TODO: Fix crash if no matches are found
 
+    # Url (short video) 
     video_index = index_hashes_for_video(url)
-    target_indices = [index_hashes_for_video(x) for x in [target]]
-    
     video_index.make_direct_map() # Make sure the index is indexable
     hash_vectors = np.array([video_index.reconstruct(i) for i in range(video_index.ntotal)]) # Retrieve original indices
+    
+    # Target video (long video)
+    target_indices = [index_hashes_for_video(x) for x in [target]]
     
     # The results are returned as a triplet of 1D arrays 
     # lims, D, I, where result for query i is in I[lims[i]:lims[i+1]] 
     # (indices of neighbors), D[lims[i]:lims[i+1]] (distances).
-
     lims, D, I = target_indices[0].range_search(hash_vectors, MIN_DISTANCE)
 
-    
+    return plot_comparison(lims, D, I, hash_vectors, MIN_DISTANCE = MIN_DISTANCE)
+
+def plot_comparison(lims, D, I, hash_vectors, MIN_DISTANCE = 3):
+    sns.set_theme()
 
     x = [(lims[i+1]-lims[i]) * [i] for i in range(hash_vectors.shape[0])]
-    x = [datetime.datetime(1970, 1, 1, 0, 0) + datetime.timedelta(seconds=i/FPS) for j in x for i in j]
-    y = [datetime.datetime(1970, 1, 1, 0, 0) + datetime.timedelta(seconds=i/FPS) for i in I]
+    x = [i/FPS for j in x for i in j]
+    y = [i/FPS for i in I]
+    
+    # Create figure and dataframe to plot with sns
+    fig = plt.figure()
+    # plt.tight_layout()
+    df = pd.DataFrame(zip(x, y), columns = ['X', 'Y'])
+    g = sns.scatterplot(data=df, x='X', y='Y', s=2*(1-D/(MIN_DISTANCE+1)), alpha=1-D/MIN_DISTANCE)
 
-    import matplotlib.pyplot as plt
+    # Set x-labels to be more readable
+    x_locs, x_labels = plt.xticks() # Get original locations and labels for x ticks
+    x_labels = [time.strftime('%H:%M:%S', time.gmtime(x)) for x in x_locs]
+    plt.xticks(x_locs, x_labels)
+    plt.xticks(rotation=90)
+    plt.xlabel('Time in source video (H:M:S)')
+    plt.xlim(0, None)
 
-    ax = plt.figure()
-    if x and y:
-        plt.scatter(x, y, s=2*(1-D/MIN_DISTANCE), alpha=1-D/MIN_DISTANCE)
-        plt.xlabel('Time in source video (seconds)')
-        plt.ylabel('Time in target video (seconds)')
-    plt.show()
-    return ax
+    # Set y-labels to be more readable
+    y_locs, y_labels = plt.yticks() # Get original locations and labels for x ticks
+    y_labels = [time.strftime('%H:%M:%S', time.gmtime(y)) for y in y_locs]
+    plt.yticks(y_locs, y_labels)
+    plt.ylabel('Time in target video (H:M:S)')
+
+    # Adjust padding to fit gradio
+    plt.subplots_adjust(bottom=0.25, left=0.20)
+    return fig 
+
+logging.basicConfig()
+logging.getLogger().setLevel(logging.DEBUG)
 
 video_urls = ["https://www.dropbox.com/s/8c89a9aba0w8gjg/Ploumen.mp4?dl=1",
               "https://www.dropbox.com/s/rzmicviu1fe740t/Bram%20van%20Ojik%20krijgt%20reprimande.mp4?dl=1",
