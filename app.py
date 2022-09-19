@@ -20,9 +20,21 @@ import numpy as np
 import pandas as pd
 import faiss
 
+import shutil
+
 FPS = 5
 
 video_directory = tempfile.gettempdir()
+
+def move_video_to_tempdir(input_dir, filename):
+    new_filename = os.path.join(video_directory, filename)
+    input_file = os.path.join(input_dir, filename)
+    if not os.path.exists(new_filename):
+        shutil.copyfile(input_file, new_filename)
+        logging.info(f"Copied {input_file} to {new_filename}.")
+    else:
+        logging.info(f"Skipping copying from {input_file} because {new_filename} already exists.")
+    return new_filename
 
 def download_video_from_url(url):
     """Download video from url or return md5 hash as video name"""
@@ -64,8 +76,11 @@ def compute_hashes(clip, fps=FPS):
         hashed = np.array(binary_array_to_uint8s(compute_hash(frame).hash), dtype='uint8')
         yield {"frame": 1+index*fps, "hash": hashed}
 
-def index_hashes_for_video(url):
-    filename = download_video_from_url(url)
+def index_hashes_for_video(url, is_file = False):
+    if not is_file:
+        filename = download_video_from_url(url)
+    else:
+        filename = url
     if os.path.exists(f'{filename}.index'):
         logging.info(f"Loading indexed hashes from {filename}.index")
         binary_index = faiss.read_index_binary(f'{filename}.index') 
@@ -88,20 +103,24 @@ def index_hashes_for_video(url):
     logging.info(f"Indexed hashes for {index.ntotal} frames to {filename}.index.")
     return index
 
-def compare_videos(url, target, MIN_DISTANCE = 3):
+def compare_videos(url, target, MIN_DISTANCE = 3): # , is_file = False):
     """" The comparison between the target and the original video will be plotted based
     on the matches between the target and the original video over time. The matches are determined
     based on the minimum distance between hashes (as computed by faiss-vectors) before they're considered a match. 
     
     args: 
-    - url: url of the source video you want to check for overlap with the target video
-    - target: url of the target video
+    - url: url of the source video (short video which you want to be checked)
+    - target: url of the target video (longer video which is a superset of the source video)
     - MIN_DISTANCE: integer representing the minimum distance between hashes on bit-level before its considered a match
     """
     # TODO: Fix crash if no matches are found
+    if url.endswith('dl=1'):
+        is_file = False
+    elif url.endswith('.mp4'):
+        is_file = True
 
     # Url (short video) 
-    video_index = index_hashes_for_video(url)
+    video_index = index_hashes_for_video(url, is_file)
     video_index.make_direct_map() # Make sure the index is indexable
     hash_vectors = np.array([video_index.reconstruct(i) for i in range(video_index.ntotal)]) # Retrieve original indices
     
