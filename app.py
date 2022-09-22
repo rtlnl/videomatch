@@ -23,6 +23,7 @@ import faiss
 import shutil
 
 FPS = 5
+MAX_DISTANCE = 30
 
 video_directory = tempfile.gettempdir()
 
@@ -103,7 +104,14 @@ def index_hashes_for_video(url, is_file = False):
     logging.info(f"Indexed hashes for {index.ntotal} frames to {filename}.index.")
     return index
 
-def compare_videos(url, target, MIN_DISTANCE = 3): # , is_file = False):
+def get_comparison(url, target, MIN_DISTANCE = 3):
+    """ Function for Gradio to combine all helper functions"""
+    video_index, hash_vectors, target_indices = get_video_indices(url, target, MIN_DISTANCE = MIN_DISTANCE)
+    lims, D, I, hash_vectors = compare_videos(video_index, hash_vectors, target_indices, MIN_DISTANCE = MIN_DISTANCE)
+    fig = plot_comparison(lims, D, I, hash_vectors, MIN_DISTANCE = MIN_DISTANCE)
+    return fig
+
+def get_video_indices(url, target, MIN_DISTANCE = 4):
     """" The comparison between the target and the original video will be plotted based
     on the matches between the target and the original video over time. The matches are determined
     based on the minimum distance between hashes (as computed by faiss-vectors) before they're considered a match. 
@@ -126,13 +134,18 @@ def compare_videos(url, target, MIN_DISTANCE = 3): # , is_file = False):
     
     # Target video (long video)
     target_indices = [index_hashes_for_video(x) for x in [target]]
-    
+
+    return video_index, hash_vectors, target_indices    
+
+def compare_videos(video_index, hash_vectors, target_indices, MIN_DISTANCE = 3): # , is_file = False):
     # The results are returned as a triplet of 1D arrays 
     # lims, D, I, where result for query i is in I[lims[i]:lims[i+1]] 
     # (indices of neighbors), D[lims[i]:lims[i+1]] (distances).
     lims, D, I = target_indices[0].range_search(hash_vectors, MIN_DISTANCE)
+    return lims, D, I, hash_vectors
 
-    return plot_comparison(lims, D, I, hash_vectors, MIN_DISTANCE = MIN_DISTANCE)
+def plot_distances(target_indices, hash_vectors, MIN_DISTANCE, MAX_DISTANCE):
+    pass                                        
 
 def plot_comparison(lims, D, I, hash_vectors, MIN_DISTANCE = 3):
     sns.set_theme()
@@ -177,15 +190,15 @@ index_iface = gr.Interface(fn=lambda url: index_hashes_for_video(url).ntotal,
                      inputs="text", outputs="text", 
                      examples=video_urls, cache_examples=True)
 
-compare_iface = gr.Interface(fn=compare_videos,
-                     inputs=["text", "text", gr.Slider(1, 25, 3, step=1)], outputs="plot", 
+compare_iface = gr.Interface(fn=get_comparison,
+                     inputs=["text", "text", gr.Slider(2, 30, 4, step=2)], outputs="plot", 
                      examples=[[x, video_urls[-1]] for x in video_urls[:-1]])
 
 iface = gr.TabbedInterface([index_iface, compare_iface], ["Index", "Compare"])
 
 if __name__ == "__main__":
     import matplotlib
-    matplotlib.use('SVG')
+    matplotlib.use('SVG') # To be able to plot in gradio
 
     logging.basicConfig()
     logging.getLogger().setLevel(logging.DEBUG)
