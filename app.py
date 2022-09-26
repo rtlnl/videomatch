@@ -16,13 +16,14 @@ import matplotlib.pyplot as plt
 import imagehash
 from PIL import Image
 
-import numpy as np
+import numpy as np  
 import pandas as pd
 import faiss
 
 import shutil
 
 FPS = 5
+MIN_DISTANCE = 4
 MAX_DISTANCE = 30
 
 video_directory = tempfile.gettempdir()
@@ -104,13 +105,6 @@ def index_hashes_for_video(url, is_file = False):
     logging.info(f"Indexed hashes for {index.ntotal} frames to {filename}.index.")
     return index
 
-def get_comparison(url, target, MIN_DISTANCE = 3):
-    """ Function for Gradio to combine all helper functions"""
-    video_index, hash_vectors, target_indices = get_video_indices(url, target, MIN_DISTANCE = MIN_DISTANCE)
-    lims, D, I, hash_vectors = compare_videos(video_index, hash_vectors, target_indices, MIN_DISTANCE = MIN_DISTANCE)
-    fig = plot_comparison(lims, D, I, hash_vectors, MIN_DISTANCE = MIN_DISTANCE)
-    return fig
-
 def get_video_indices(url, target, MIN_DISTANCE = 4):
     """" The comparison between the target and the original video will be plotted based
     on the matches between the target and the original video over time. The matches are determined
@@ -144,8 +138,18 @@ def compare_videos(video_index, hash_vectors, target_indices, MIN_DISTANCE = 3):
     lims, D, I = target_indices[0].range_search(hash_vectors, MIN_DISTANCE)
     return lims, D, I, hash_vectors
 
-def plot_distances(target_indices, hash_vectors, MIN_DISTANCE, MAX_DISTANCE):
-    pass                                        
+def get_decent_distance(url, target, MIN_DISTANCE, MAX_DISTANCE):
+    """ To get a decent heurstic for a base distance check every distance from MIN_DISTANCE to MAX_DISTANCE
+    until the number of matches found is equal to or higher than the number of frames in the source video"""
+    for distance in np.arange(start = MIN_DISTANCE - 2, stop = MAX_DISTANCE + 2, step = 2, dtype=int):
+        distance = int(distance)
+        video_index, hash_vectors, target_indices = get_video_indices(url, target, MIN_DISTANCE = distance)
+        lims, D, I, hash_vectors = compare_videos(video_index, hash_vectors, target_indices, MIN_DISTANCE = distance)
+        nr_source_frames = video_index.ntotal
+        nr_matches = len(D)
+        logging.info(f"{(nr_matches/nr_source_frames) * 100.0:.1f}% of frames have a match for distance '{distance}' ({nr_matches} matches for {nr_source_frames} frames)")
+        if nr_matches >= nr_source_frames:
+            return distance                                    
 
 def plot_comparison(lims, D, I, hash_vectors, MIN_DISTANCE = 3):
     sns.set_theme()
@@ -179,7 +183,22 @@ def plot_comparison(lims, D, I, hash_vectors, MIN_DISTANCE = 3):
     return fig 
 
 logging.basicConfig()
-logging.getLogger().setLevel(logging.DEBUG)
+logging.getLogger().setLevel(logging.INFO)
+
+def get_comparison(url, target, MIN_DISTANCE = 4):
+    """ Function for Gradio to combine all helper functions"""
+    video_index, hash_vectors, target_indices = get_video_indices(url, target, MIN_DISTANCE = MIN_DISTANCE)
+    lims, D, I, hash_vectors = compare_videos(video_index, hash_vectors, target_indices, MIN_DISTANCE = MIN_DISTANCE)
+    fig = plot_comparison(lims, D, I, hash_vectors, MIN_DISTANCE = MIN_DISTANCE)
+    return fig
+
+def get_auto_comparison(url, target, MIN_DISTANCE = MIN_DISTANCE):
+    """ Function for Gradio to combine all helper functions"""
+    distance = get_decent_distance(url, target, MIN_DISTANCE, MAX_DISTANCE)
+    video_index, hash_vectors, target_indices = get_video_indices(url, target, MIN_DISTANCE = distance)
+    lims, D, I, hash_vectors = compare_videos(video_index, hash_vectors, target_indices, MIN_DISTANCE = distance)
+    fig = plot_comparison(lims, D, I, hash_vectors, MIN_DISTANCE = distance)
+    return fig
 
 video_urls = ["https://www.dropbox.com/s/8c89a9aba0w8gjg/Ploumen.mp4?dl=1",
               "https://www.dropbox.com/s/rzmicviu1fe740t/Bram%20van%20Ojik%20krijgt%20reprimande.mp4?dl=1",
@@ -194,14 +213,18 @@ compare_iface = gr.Interface(fn=get_comparison,
                      inputs=["text", "text", gr.Slider(2, 30, 4, step=2)], outputs="plot", 
                      examples=[[x, video_urls[-1]] for x in video_urls[:-1]])
 
-iface = gr.TabbedInterface([index_iface, compare_iface], ["Index", "Compare"])
+auto_compare_iface = gr.Interface(fn=get_auto_comparison,
+                     inputs=["text", "text"], outputs="plot", 
+                     examples=[[x, video_urls[-1]] for x in video_urls[:-1]])
+
+iface = gr.TabbedInterface([index_iface, compare_iface, auto_compare_iface], ["Index", "Compare", "AutoCompare"])
 
 if __name__ == "__main__":
     import matplotlib
     matplotlib.use('SVG') # To be able to plot in gradio
 
     logging.basicConfig()
-    logging.getLogger().setLevel(logging.DEBUG)
+    logging.getLogger().setLevel(logging.INFO)
 
     iface.launch()
     #iface.launch(auth=("test", "test"), share=True, debug=True)
