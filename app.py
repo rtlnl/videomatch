@@ -185,6 +185,73 @@ def plot_comparison(lims, D, I, hash_vectors, MIN_DISTANCE = 3):
 logging.basicConfig()
 logging.getLogger().setLevel(logging.INFO)
 
+def plot_multi_comparison(df):
+    fig, ax_arr = plt.subplots(3, 2, figsize=(12, 6), dpi=100, sharex=True) # , ax=axes[1]
+    # plt.scatter(x=df['TARGET_S'], y = df['SOURCE_S'], ax=ax_arr[0])
+    # plt.scatter(x=df['TARGET_S'], y = df['SOURCE_S'], ax=ax_arr[1])
+    sns.scatterplot(data = df, x='TARGET_S', y='SOURCE_S', ax=ax_arr[0,0])
+    sns.lineplot(data = df, x='TARGET_S', y='SOURCE_LIP_S', ax=ax_arr[0,1])
+    sns.scatterplot(data = df, x='TARGET_S', y='TIMESHIFT', ax=ax_arr[1,0])
+    sns.lineplot(data = df, x='TARGET_S', y='TIMESHIFT_LIP', ax=ax_arr[1,1])
+    sns.scatterplot(data = df, x='TARGET_S', y='OFFSET', ax=ax_arr[2,0])
+    sns.lineplot(data = df, x='TARGET_S', y='OFFSET_LIP', ax=ax_arr[2,1])
+    return fig
+
+
+def get_videomatch_df(url, target, min_distance=MIN_DISTANCE, vanilla_df=False):
+    distance = get_decent_distance(url, target, MIN_DISTANCE, MAX_DISTANCE)
+    video_index, hash_vectors, target_indices = get_video_indices(url, target, MIN_DISTANCE = distance)
+    lims, D, I, hash_vectors = compare_videos(video_index, hash_vectors, target_indices, MIN_DISTANCE = distance)
+
+    target = [(lims[i+1]-lims[i]) * [i] for i in range(hash_vectors.shape[0])]
+    target_s = [i/FPS for j in target for i in j]
+    source_s = [i/FPS for i in I]
+
+    # Make df
+    df = pd.DataFrame(zip(target_s, source_s, D, I), columns = ['TARGET_S', 'SOURCE_S', 'DISTANCE', 'INDICES'])
+    if vanilla_df:
+        return df
+        
+    # Minimum distance dataframe ----
+    # Group by X so for every second/x there will be 1 value of Y in the end
+    # index_min_distance = df.groupby('TARGET_S')['DISTANCE'].idxmin()
+    # df_min = df.loc[index_min_distance]
+    # df_min
+    # -------------------------------
+
+    df['TARGET_WEIGHT'] = 1 - df['DISTANCE']/distance # Higher value means a better match    
+    df['SOURCE_WEIGHTED_VALUE'] = df['SOURCE_S'] * df['TARGET_WEIGHT'] # Multiply the weight (which indicates a better match) with the value for Y and aggregate to get a less noisy estimate of Y
+
+    # Group by X so for every second/x there will be 1 value of Y in the end
+    grouped_X = df.groupby('TARGET_S').agg({'SOURCE_WEIGHTED_VALUE' : 'sum', 'TARGET_WEIGHT' : 'sum'})
+    grouped_X['FINAL_SOURCE_VALUE'] = grouped_X['SOURCE_WEIGHTED_VALUE'] / grouped_X['TARGET_WEIGHT'] 
+
+    # Remake the dataframe
+    df = grouped_X.reset_index()
+    df = df.drop(columns=['SOURCE_WEIGHTED_VALUE', 'TARGET_WEIGHT'])
+    df = df.rename({'FINAL_SOURCE_VALUE' : 'SOURCE_S'}, axis='columns')
+
+    # Add NAN to "missing" x values (base it off hash vector, not target_s)
+    step_size = 1/FPS
+    x_complete =  np.round(np.arange(start=0.0, stop = max(df['TARGET_S'])+step_size, step = step_size), 1) # More robust    
+    df['TARGET_S'] = np.round(df['TARGET_S'], 1)
+    df_complete = pd.DataFrame(x_complete, columns=['TARGET_S'])
+
+    # Merge dataframes to get NAN values for every missing SOURCE_S
+    df = df_complete.merge(df, on='TARGET_S', how='left')
+
+    # Interpolate between frames since there are missing values
+    df['SOURCE_LIP_S'] = df['SOURCE_S'].interpolate(method='linear', limit_direction='both', axis=0)
+   
+    # Add timeshift col and timeshift col with Linearly Interpolated Values
+    df['TIMESHIFT'] = df['SOURCE_S'].shift(1) - df['SOURCE_S']
+    df['TIMESHIFT_LIP'] = df['SOURCE_LIP_S'].shift(1) - df['SOURCE_LIP_S']
+
+    # Add Offset col that assumes the video is played at the same speed as the other to do a "timeshift"
+    df['OFFSET'] = df['SOURCE_S'] - df['TARGET_S'] - np.min(df['SOURCE_S'])
+    df['OFFSET_LIP'] = df['SOURCE_LIP_S'] - df['TARGET_S'] - np.min(df['SOURCE_LIP_S'])
+    return df
+
 def get_comparison(url, target, MIN_DISTANCE = 4):
     """ Function for Gradio to combine all helper functions"""
     video_index, hash_vectors, target_indices = get_video_indices(url, target, MIN_DISTANCE = MIN_DISTANCE)
@@ -197,7 +264,9 @@ def get_auto_comparison(url, target, MIN_DISTANCE = MIN_DISTANCE):
     distance = get_decent_distance(url, target, MIN_DISTANCE, MAX_DISTANCE)
     video_index, hash_vectors, target_indices = get_video_indices(url, target, MIN_DISTANCE = distance)
     lims, D, I, hash_vectors = compare_videos(video_index, hash_vectors, target_indices, MIN_DISTANCE = distance)
-    fig = plot_comparison(lims, D, I, hash_vectors, MIN_DISTANCE = distance)
+    # fig = plot_comparison(lims, D, I, hash_vectors, MIN_DISTANCE = distance)
+    df = get_videomatch_df(url, target, min_distance=MIN_DISTANCE, vanilla_df=False)
+    fig = plot_multi_comparison(df)
     return fig
 
 video_urls = ["https://www.dropbox.com/s/8c89a9aba0w8gjg/Ploumen.mp4?dl=1",
