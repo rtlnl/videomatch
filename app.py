@@ -274,7 +274,7 @@ def get_change_points(df, smoothing_window_size=10, method='CUSUM'):
     tsd = TimeSeriesData(df.loc[:,['time','OFFSET_LIP']])
     if method.upper() == "CUSUM":
         detector = CUSUMDetector(tsd)
-    elif method.upper() == "ROBUSTSTAT":
+    elif method.upper() == "ROBUST":
         detector = RobustStatDetector(tsd)
     change_points =  detector.detector(smoothing_window_size=smoothing_window_size, comparison_window=-2)
 
