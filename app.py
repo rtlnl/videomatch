@@ -22,6 +22,10 @@ import faiss
 
 import shutil
 
+from kats.detectors.cusum_detection import CUSUMDetector
+from kats.detectors.robust_stat_detection import RobustStatDetector
+from kats.consts import TimeSeriesData
+
 FPS = 5
 MIN_DISTANCE = 4
 MAX_DISTANCE = 30
@@ -79,6 +83,8 @@ def compute_hashes(clip, fps=FPS):
         yield {"frame": 1+index*fps, "hash": hashed}
 
 def index_hashes_for_video(url, is_file = False):
+    """ Download a video if it is a url, otherwise refer to the file. Secondly index the video
+    using faiss indices and return thi index. """
     if not is_file:
         filename = download_video_from_url(url)
     else:
@@ -116,9 +122,8 @@ def get_video_indices(url, target, MIN_DISTANCE = 4):
     - MIN_DISTANCE: integer representing the minimum distance between hashes on bit-level before its considered a match
     """
     # TODO: Fix crash if no matches are found
-    if url.endswith('dl=1'):
-        is_file = False
-    elif url.endswith('.mp4'):
+    is_file = False
+    if url.endswith('.mp4'):
         is_file = True
 
     # Url (short video) 
@@ -132,6 +137,8 @@ def get_video_indices(url, target, MIN_DISTANCE = 4):
     return video_index, hash_vectors, target_indices    
 
 def compare_videos(video_index, hash_vectors, target_indices, MIN_DISTANCE = 3): # , is_file = False):
+    """ Search for matches between the indices of the  target video (long video) 
+    and the given hash vectors of a video"""
     # The results are returned as a triplet of 1D arrays 
     # lims, D, I, where result for query i is in I[lims[i]:lims[i+1]] 
     # (indices of neighbors), D[lims[i]:lims[i+1]] (distances).
@@ -149,7 +156,9 @@ def get_decent_distance(url, target, MIN_DISTANCE, MAX_DISTANCE):
         nr_matches = len(D)
         logging.info(f"{(nr_matches/nr_source_frames) * 100.0:.1f}% of frames have a match for distance '{distance}' ({nr_matches} matches for {nr_source_frames} frames)")
         if nr_matches >= nr_source_frames:
-            return distance                                    
+            return distance  
+    logging.warning(f"No matches found for any distance between {MIN_DISTANCE} and {MAX_DISTANCE}")
+    return None                              
 
 def plot_comparison(lims, D, I, hash_vectors, MIN_DISTANCE = 3):
     sns.set_theme()
@@ -185,16 +194,22 @@ def plot_comparison(lims, D, I, hash_vectors, MIN_DISTANCE = 3):
 logging.basicConfig()
 logging.getLogger().setLevel(logging.INFO)
 
-def plot_multi_comparison(df):
-    fig, ax_arr = plt.subplots(3, 2, figsize=(12, 6), dpi=100, sharex=True) # , ax=axes[1]
-    # plt.scatter(x=df['TARGET_S'], y = df['SOURCE_S'], ax=ax_arr[0])
-    # plt.scatter(x=df['TARGET_S'], y = df['SOURCE_S'], ax=ax_arr[1])
-    sns.scatterplot(data = df, x='TARGET_S', y='SOURCE_S', ax=ax_arr[0,0])
-    sns.lineplot(data = df, x='TARGET_S', y='SOURCE_LIP_S', ax=ax_arr[0,1])
-    sns.scatterplot(data = df, x='TARGET_S', y='TIMESHIFT', ax=ax_arr[1,0])
-    sns.lineplot(data = df, x='TARGET_S', y='TIMESHIFT_LIP', ax=ax_arr[1,1])
-    sns.scatterplot(data = df, x='TARGET_S', y='OFFSET', ax=ax_arr[2,0])
-    sns.lineplot(data = df, x='TARGET_S', y='OFFSET_LIP', ax=ax_arr[2,1])
+def plot_multi_comparison(df, change_points):
+    """ From the dataframe plot the current set of plots, where the bottom right is most indicative """
+    fig, ax_arr = plt.subplots(3, 2, figsize=(12, 6), dpi=100, sharex=True)
+    sns.scatterplot(data = df, x='time', y='SOURCE_S', ax=ax_arr[0,0])
+    sns.lineplot(data = df, x='time', y='SOURCE_LIP_S', ax=ax_arr[0,1])
+    sns.scatterplot(data = df, x='time', y='OFFSET', ax=ax_arr[1,0])
+    sns.lineplot(data = df, x='time', y='OFFSET_LIP', ax=ax_arr[1,1])
+
+    # Plot change point as lines 
+    sns.lineplot(data = df, x='time', y='OFFSET_LIP', ax=ax_arr[2,1])
+    for x in change_points:
+        cp_time = x.start_time
+        plt.vlines(x=cp_time, ymin=np.min(df['OFFSET_LIP']), ymax=np.max(df['OFFSET_LIP']), colors='red', lw=2)
+        rand_y_pos = np.random.uniform(low=np.min(df['OFFSET_LIP']), high=np.max(df['OFFSET_LIP']), size=None)
+        plt.text(x=cp_time, y=rand_y_pos, s=str(np.round(x.confidence, 2)), color='r', rotation=-0.0, fontsize=14)
+    plt.xticks(rotation=90)
     return fig
 
 
@@ -250,7 +265,26 @@ def get_videomatch_df(url, target, min_distance=MIN_DISTANCE, vanilla_df=False):
     # Add Offset col that assumes the video is played at the same speed as the other to do a "timeshift"
     df['OFFSET'] = df['SOURCE_S'] - df['TARGET_S'] - np.min(df['SOURCE_S'])
     df['OFFSET_LIP'] = df['SOURCE_LIP_S'] - df['TARGET_S'] - np.min(df['SOURCE_LIP_S'])
+    
+    # Add time column for plotting
+    df['time'] = pd.to_datetime(df["TARGET_S"], unit='s') # Needs a datetime as input
     return df
+
+def get_change_points(df, smoothing_window_size=10, method='CUSUM'):
+    tsd = TimeSeriesData(df.loc[:,['time','OFFSET_LIP']])
+    if method.upper() == "CUSUM":
+        detector = CUSUMDetector(tsd)
+    elif method.upper() == "ROBUSTSTAT":
+        detector = RobustStatDetector(tsd)
+    change_points =  detector.detector(smoothing_window_size=smoothing_window_size, comparison_window=-2)
+
+    # Print some stats
+    if method.upper() == "CUSUM" and change_points != []:
+        mean_offset_prechange = change_points[0].mu0 
+        mean_offset_postchange = change_points[0].mu1 
+        jump_s = mean_offset_postchange - mean_offset_prechange
+        print(f"Video jumps {jump_s:.1f}s in time at {mean_offset_prechange:.1f} seconds")
+    return change_points
 
 def get_comparison(url, target, MIN_DISTANCE = 4):
     """ Function for Gradio to combine all helper functions"""
@@ -259,34 +293,43 @@ def get_comparison(url, target, MIN_DISTANCE = 4):
     fig = plot_comparison(lims, D, I, hash_vectors, MIN_DISTANCE = MIN_DISTANCE)
     return fig
 
-def get_auto_comparison(url, target, MIN_DISTANCE = MIN_DISTANCE):
+def get_auto_comparison(url, target, smoothing_window_size=10, method="CUSUM"):
     """ Function for Gradio to combine all helper functions"""
     distance = get_decent_distance(url, target, MIN_DISTANCE, MAX_DISTANCE)
+    if distance == None:
+        raise gr.Error("No matches found!")
     video_index, hash_vectors, target_indices = get_video_indices(url, target, MIN_DISTANCE = distance)
     lims, D, I, hash_vectors = compare_videos(video_index, hash_vectors, target_indices, MIN_DISTANCE = distance)
     # fig = plot_comparison(lims, D, I, hash_vectors, MIN_DISTANCE = distance)
     df = get_videomatch_df(url, target, min_distance=MIN_DISTANCE, vanilla_df=False)
-    fig = plot_multi_comparison(df)
+    change_points = get_change_points(df, smoothing_window_size=smoothing_window_size, method=method)
+    fig = plot_multi_comparison(df, change_points)
     return fig
+
+    
 
 video_urls = ["https://www.dropbox.com/s/8c89a9aba0w8gjg/Ploumen.mp4?dl=1",
               "https://www.dropbox.com/s/rzmicviu1fe740t/Bram%20van%20Ojik%20krijgt%20reprimande.mp4?dl=1",
               "https://www.dropbox.com/s/wcot34ldmb84071/Baudet%20ontmaskert%20Omtzigt_%20u%20bent%20door%20de%20mand%20gevallen%21.mp4?dl=1",
+              "https://drive.google.com/uc?id=1XW0niHR1k09vPNv1cp6NvdGXe7FHJc1D&export=download",
               "https://www.dropbox.com/s/4ognq8lshcujk43/Plenaire_zaal_20200923132426_Omtzigt.mp4?dl=1"]
 
 index_iface = gr.Interface(fn=lambda url: index_hashes_for_video(url).ntotal, 
-                     inputs="text", outputs="text", 
+                     inputs="text", 
+                     outputs="text", 
                      examples=video_urls, cache_examples=True)
 
 compare_iface = gr.Interface(fn=get_comparison,
-                     inputs=["text", "text", gr.Slider(2, 30, 4, step=2)], outputs="plot", 
+                     inputs=["text", "text", gr.Slider(2, 30, 4, step=2)], 
+                     outputs="plot", 
                      examples=[[x, video_urls[-1]] for x in video_urls[:-1]])
 
 auto_compare_iface = gr.Interface(fn=get_auto_comparison,
-                     inputs=["text", "text"], outputs="plot", 
+                     inputs=["text", "text", gr.Slider(1, 50, 10, step=1), gr.Dropdown(choices=["CUSUM", "Robust"], value="CUSUM")], 
+                     outputs="plot", 
                      examples=[[x, video_urls[-1]] for x in video_urls[:-1]])
 
-iface = gr.TabbedInterface([index_iface, compare_iface, auto_compare_iface], ["Index", "Compare", "AutoCompare"])
+iface = gr.TabbedInterface([auto_compare_iface, compare_iface, index_iface,], ["AutoCompare", "Compare", "Index"])
 
 if __name__ == "__main__":
     import matplotlib
@@ -295,5 +338,5 @@ if __name__ == "__main__":
     logging.basicConfig()
     logging.getLogger().setLevel(logging.INFO)
 
-    iface.launch()
+    iface.launch(inbrowser=True, debug=True)
     #iface.launch(auth=("test", "test"), share=True, debug=True)
