@@ -44,7 +44,7 @@ def move_video_to_tempdir(input_dir, filename):
 
 def download_video_from_url(url):
     """Download video from url or return md5 hash as video name"""
-    filename = os.path.join(video_directory, hashlib.md5(url.encode()).hexdigest())
+    filename = filename_from_url(url)
     if not os.path.exists(filename):
         with (urllib.request.urlopen(url)) as f, open(filename, 'wb') as fileout:
             fileout.write(f.read())
@@ -94,6 +94,8 @@ def index_hashes_for_video(url, is_file = False):
         binary_index = faiss.read_index_binary(f'{filename}.index') 
         logging.info(f"Index {filename}.index has in total {binary_index.ntotal} frames")
         return binary_index
+
+    download_video_from_url(url)
 
     hash_vectors = np.array([x['hash'] for x in compute_hashes(VideoFileClip(filename))])
     logging.info(f"Computed hashes for {hash_vectors.shape} frames.")
