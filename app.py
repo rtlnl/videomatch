@@ -5,13 +5,13 @@ import gradio as gr
 from config import *
 from videomatch import index_hashes_for_video, get_decent_distance, \
     get_video_index, compare_videos, get_change_points, get_videomatch_df
-from plot import plot_comparison, plot_multi_comparison
+from plot import plot_comparison, plot_multi_comparison, plot_segment_comparison
 
 logging.basicConfig()
 logging.getLogger().setLevel(logging.INFO)
                       
 
-def get_comparison(url, target, MIN_DISTANCE = 4):
+def get_comparison(url, target, MIN_DISTANCE = 4):  
     """ Function for Gradio to combine all helper functions"""
     video_index, hash_vectors = get_video_index(url)
     target_index, _ = get_video_index(target)
@@ -31,7 +31,7 @@ def get_auto_comparison(url, target, smoothing_window_size=10, method="CUSUM"):
     # fig = plot_comparison(lims, D, I, hash_vectors, MIN_DISTANCE = distance)
     df = get_videomatch_df(url, target, min_distance=MIN_DISTANCE, vanilla_df=False)
     change_points = get_change_points(df, smoothing_window_size=smoothing_window_size, method=method)
-    fig = plot_multi_comparison(df, change_points)
+    fig = plot_segment_comparison(df, change_points)
     return fig
 
 def get_auto_edit_decision(url, target, smoothing_window_size=10):

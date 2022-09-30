@@ -56,3 +56,66 @@ def plot_multi_comparison(df, change_points):
         plt.text(x=cp_time, y=rand_y_pos, s=str(np.round(x.confidence, 2)), color='r', rotation=-0.0, fontsize=14)
     plt.xticks(rotation=90)
     return fig
+
+def change_points_to_segments(df, change_points):
+    """ Convert change points from kats detector to segment indicators """
+    return [pd.to_datetime(0.0, unit='s').to_datetime64()] + [cp.start_time for cp in change_points] + [pd.to_datetime(df.iloc[-1]['TARGET_S'], unit='s').to_datetime64()]
+
+def add_seconds_to_datetime64(datetime64, seconds, subtract=False):
+    """Add or substract a number of seconds to a np.datetime64 object """
+    s, m = divmod(seconds, 1.0)
+    if subtract:
+        return datetime64 - np.timedelta64(int(s), 's') - np.timedelta64(int(m * 1000), 'ms')
+    return datetime64 + np.timedelta64(int(s), 's') + np.timedelta64(int(m * 1000), 'ms')
+
+def plot_segment_comparison(df, change_points):
+    """ From the dataframe plot the current set of plots, where the bottom right is most indicative """
+    fig, ax_arr = plt.subplots(2, 2, figsize=(12, 4), dpi=100, sharex=True)
+    sns.scatterplot(data = df, x='time', y='SOURCE_S', ax=ax_arr[0,0])
+    sns.lineplot(data = df, x='time', y='SOURCE_LIP_S', ax=ax_arr[0,1])
+
+    # Plot change point as lines 
+    sns.lineplot(data = df, x='time', y='OFFSET_LIP', ax=ax_arr[1,0])
+    sns.lineplot(data = df, x='time', y='OFFSET_LIP', ax=ax_arr[1,1])
+    timestamps = change_points_to_segments(df, change_points) 
+
+    # To plot the detected segment lines 
+    for x in timestamps:
+        plt.vlines(x=x, ymin=np.min(df['OFFSET_LIP']), ymax=np.max(df['OFFSET_LIP']), colors='black', lw=2)
+        rand_y_pos = np.random.uniform(low=np.min(df['OFFSET_LIP']), high=np.max(df['OFFSET_LIP']), size=None)
+
+    # To get each detected segment and their mean?
+    threshold_diff = 1.5 # Average diff threshold 
+    # threshold = 3.0 # s diff threshold
+    for start_time, end_time in zip(timestamps[:-1], timestamps[1:]):
+
+        add_offset = np.min(df['SOURCE_S'])
+        
+        # Cut out the segment between the segment lines 
+        segment = df[(df['time'] > start_time) & (df['time'] < end_time)] # Not offset LIP
+        segment_no_nan = segment[~np.isnan(segment['OFFSET'])] # Remove NaNs
+        seg_mean = np.mean(segment_no_nan['OFFSET'])
+
+         # Get average difference from mean of the segment to see if it is a "straight line" or not 
+        # segment_no_nan = segment['OFFSET'][~np.isnan(segment['OFFSET'])] # Remove NaNs
+        average_diff = np.mean(np.abs(segment_no_nan['OFFSET'] - seg_mean))
+        
+        # If the time where the segment comes from (origin time) is close to the start_time, it's a "good match", so no editing
+        prefix = "GOOD" if average_diff < threshold_diff else "BAD"
+        origin_time = add_seconds_to_datetime64(start_time, seg_mean + add_offset)
+        # prefix = "BAD"
+        # if (start_time < add_seconds_to_datetime64(origin_time, threshold) and (start_time > add_seconds_to_datetime64(origin_time, threshold, subtract=True))):
+        #     prefix = "GOOD"
+
+        # Plot green for a confident prediction (straight line), red otherwise
+        if prefix == "GOOD":
+            plt.text(x=start_time, y=seg_mean, s=str(np.round(average_diff, 1)), color='g', rotation=-0.0, fontsize=14)   
+        else:
+            plt.text(x=start_time, y=seg_mean, s=str(np.round(average_diff, 1)), color='r', rotation=-0.0, fontsize=14)   
+        
+        print(f"[{prefix}] DIFF={average_diff:.1f} MEAN={seg_mean:.1f} {start_time} -> {end_time} comes from video X, from {origin_time}")
+
+
+    # Return figure
+    plt.xticks(rotation=90)
+    return fig
