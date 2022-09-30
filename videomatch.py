@@ -38,45 +38,37 @@ def index_hashes_for_video(url: str) -> faiss.IndexBinaryIVF:
     logging.info(f"Indexed hashes for {index.ntotal} frames to {filepath}.index.")
     return index
 
-def get_video_indices(filepath: str, target: str, MIN_DISTANCE: int = 4):
-    """" The comparison between the target and the original video will be plotted based
-    on the matches between the target and the original video over time. The matches are determined
-    based on the minimum distance between hashes (as computed by faiss-vectors) before they're considered a match. 
-    
+def get_video_index(url: str):
+    """" Builds up a FAISS index for a video.
     args: 
-    - url: url of the source video (short video which you want to be checked)
-    - target: url of the target video (longer video which is a superset of the source video)
-    - MIN_DISTANCE: integer representing the minimum distance between hashes on bit-level before its considered a match
+    - filepath: location of the source video
     """
-    # TODO: Fix crash if no matches are found
-
     # Url (short video) 
-    video_index = index_hashes_for_video(filepath)
+    video_index = index_hashes_for_video(url)
     video_index.make_direct_map() # Make sure the index is indexable
     hash_vectors = np.array([video_index.reconstruct(i) for i in range(video_index.ntotal)]) # Retrieve original indices
     
-    # Target video (long video)
-    target_indices = [index_hashes_for_video(x) for x in [target]]
+    return video_index, hash_vectors
 
-    return video_index, hash_vectors, target_indices    
-
-def compare_videos(hash_vectors, target_indices, MIN_DISTANCE = 3):
-    """ Search for matches between the indices of the  target video (long video) 
-    and the given hash vectors of a video"""
+def compare_videos(hash_vectors, target_index, MIN_DISTANCE = 3):
+    """ The comparison between the target and the original video will be plotted based
+    on the matches between the target and the original video over time. The matches are determined
+    based on the minimum distance between hashes (as computed by faiss-vectors) before they're considered a match.
+    """
     # The results are returned as a triplet of 1D arrays 
     # lims, D, I, where result for query i is in I[lims[i]:lims[i+1]] 
     # (indices of neighbors), D[lims[i]:lims[i+1]] (distances).
-    for index in target_indices:
-        lims, D, I = index.range_search(hash_vectors, MIN_DISTANCE)
-        return lims, D, I, hash_vectors
+    lims, D, I = target_index.range_search(hash_vectors, MIN_DISTANCE)
+    return lims, D, I, hash_vectors
 
-def get_decent_distance(url, target, MIN_DISTANCE, MAX_DISTANCE):
+def get_decent_distance(filepath, target, MIN_DISTANCE, MAX_DISTANCE):
     """ To get a decent heurstic for a base distance check every distance from MIN_DISTANCE to MAX_DISTANCE
     until the number of matches found is equal to or higher than the number of frames in the source video"""
     for distance in np.arange(start = MIN_DISTANCE - 2, stop = MAX_DISTANCE + 2, step = 2, dtype=int):
         distance = int(distance)
-        video_index, hash_vectors, target_indices = get_video_indices(url, target, MIN_DISTANCE = distance)
-        lims, D, I, hash_vectors = compare_videos(hash_vectors, target_indices, MIN_DISTANCE = distance)
+        video_index, hash_vectors = get_video_index(filepath)
+        target_index, _ = get_video_index(target)
+        lims, D, I, hash_vectors = compare_videos(hash_vectors, target_index, MIN_DISTANCE = distance)
         nr_source_frames = video_index.ntotal
         nr_matches = len(D)
         logging.info(f"{(nr_matches/nr_source_frames) * 100.0:.1f}% of frames have a match for distance '{distance}' ({nr_matches} matches for {nr_source_frames} frames)")
@@ -103,8 +95,9 @@ def get_change_points(df, smoothing_window_size=10, method='CUSUM'):
 
 def get_videomatch_df(url, target, min_distance=MIN_DISTANCE, vanilla_df=False):
     distance = get_decent_distance(url, target, MIN_DISTANCE, MAX_DISTANCE)
-    video_index, hash_vectors, target_indices = get_video_indices(url, target, MIN_DISTANCE = distance)
-    lims, D, I, hash_vectors = compare_videos(hash_vectors, target_indices, MIN_DISTANCE = distance)
+    _, hash_vectors = get_video_index(url)
+    target_index, _ = get_video_index(target)
+    lims, D, I, hash_vectors = compare_videos(hash_vectors, target_index, MIN_DISTANCE = distance)
 
     target = [(lims[i+1]-lims[i]) * [i] for i in range(hash_vectors.shape[0])]
     target_s = [i/FPS for j in target for i in j]

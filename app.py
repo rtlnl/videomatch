@@ -4,7 +4,7 @@ import gradio as gr
 
 from config import *
 from videomatch import index_hashes_for_video, get_decent_distance, \
-    get_video_indices, compare_videos, get_change_points, get_videomatch_df
+    get_video_index, compare_videos, get_change_points, get_videomatch_df
 from plot import plot_comparison, plot_multi_comparison
 
 logging.basicConfig()
@@ -13,8 +13,9 @@ logging.getLogger().setLevel(logging.INFO)
 
 def get_comparison(url, target, MIN_DISTANCE = 4):
     """ Function for Gradio to combine all helper functions"""
-    video_index, hash_vectors, target_indices = get_video_indices(url, target, MIN_DISTANCE = MIN_DISTANCE)
-    lims, D, I, hash_vectors = compare_videos(hash_vectors, target_indices, MIN_DISTANCE = MIN_DISTANCE)
+    video_index, hash_vectors = get_video_index(url)
+    target_index, _ = get_video_index(target)
+    lims, D, I, hash_vectors = compare_videos(hash_vectors, target_index, MIN_DISTANCE = MIN_DISTANCE)
     fig = plot_comparison(lims, D, I, hash_vectors, MIN_DISTANCE = MIN_DISTANCE)
     return fig
 
@@ -24,8 +25,9 @@ def get_auto_comparison(url, target, smoothing_window_size=10, method="CUSUM"):
     if distance == None:
         return None
         raise gr.Error("No matches found!")
-    video_index, hash_vectors, target_indices = get_video_indices(url, target, MIN_DISTANCE = distance)
-    lims, D, I, hash_vectors = compare_videos(hash_vectors, target_indices, MIN_DISTANCE = distance)
+    video_index, hash_vectors = get_video_index(url)
+    target_index, _ = get_video_index(target)
+    lims, D, I, hash_vectors = compare_videos(hash_vectors, target_index, MIN_DISTANCE = distance)
     # fig = plot_comparison(lims, D, I, hash_vectors, MIN_DISTANCE = distance)
     df = get_videomatch_df(url, target, min_distance=MIN_DISTANCE, vanilla_df=False)
     change_points = get_change_points(df, smoothing_window_size=smoothing_window_size, method=method)
@@ -38,8 +40,9 @@ def get_auto_edit_decision(url, target, smoothing_window_size=10):
     if distance == None:
         return None
         raise gr.Error("No matches found!")
-    video_index, hash_vectors, target_indices = get_video_indices(url, target, MIN_DISTANCE = distance)
-    lims, D, I, hash_vectors = compare_videos(hash_vectors, target_indices, MIN_DISTANCE = distance)
+    video_index, hash_vectors = get_video_index(url)
+    target_index, _ = get_video_index(target)
+    lims, D, I, hash_vectors = compare_videos(hash_vectors, target_index, MIN_DISTANCE = distance)
     
     df = get_videomatch_df(url, target, min_distance=MIN_DISTANCE, vanilla_df=False)
     change_points = get_change_points(df, smoothing_window_size=smoothing_window_size, method="ROBUST")

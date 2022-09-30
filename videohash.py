@@ -1,5 +1,6 @@
 import os
 import urllib.request
+import shutil
 import logging
 import hashlib
 
@@ -20,7 +21,7 @@ def download_video_from_url(url):
     filepath = filepath_from_url(url)
     if not os.path.exists(filepath):
         with (urllib.request.urlopen(url)) as f, open(filepath, 'wb') as fileout:
-            fileout.write(f.read())
+            shutil.copyfileobj(f, fileout, length=16*1024)
         logging.info(f"Downloaded video from {url} to {filepath}.")
     else:
         logging.info(f"Skipping downloading from {url} because {filepath} already exists.")
