@@ -137,6 +137,7 @@ def get_auto_comparison(url, target, smoothing_window_size=10, method="CUSUM"):
     """ Function for Gradio to combine all helper functions"""
     distance = get_decent_distance(url, target, MIN_DISTANCE, MAX_DISTANCE)
     if distance == None:
+        return None
         raise gr.Error("No matches found!")
     video_index, hash_vectors, target_indices = get_video_indices(url, target, MIN_DISTANCE = distance)
     lims, D, I, hash_vectors = compare_videos(hash_vectors, target_indices, MIN_DISTANCE = distance)
@@ -175,5 +176,5 @@ if __name__ == "__main__":
     import matplotlib
     matplotlib.use('SVG') # To be able to plot in gradio
 
-    iface.launch(inbrowser=True, debug=True)
+    iface.launch(show_error=True)
     #iface.launch(auth=("test", "test"), share=True, debug=True)
