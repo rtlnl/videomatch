@@ -7,9 +7,11 @@ from kats.detectors.cusum_detection import CUSUMDetector
 from kats.detectors.robust_stat_detection import RobustStatDetector
 from kats.consts import TimeSeriesData
 
-import numpy as np  
+import numpy as np
+import pandas as pd
 
 from videohash import compute_hashes, filepath_from_url
+from config import FPS, MIN_DISTANCE, MAX_DISTANCE
 
 def index_hashes_for_video(url: str) -> faiss.IndexBinaryIVF:
     """ Compute hashes of a video and index the video using faiss indices and return the index. """
@@ -98,3 +100,60 @@ def get_change_points(df, smoothing_window_size=10, method='CUSUM'):
         jump_s = mean_offset_postchange - mean_offset_prechange
         print(f"Video jumps {jump_s:.1f}s in time at {mean_offset_prechange:.1f} seconds")
     return change_points
+
+def get_videomatch_df(url, target, min_distance=MIN_DISTANCE, vanilla_df=False):
+    distance = get_decent_distance(url, target, MIN_DISTANCE, MAX_DISTANCE)
+    video_index, hash_vectors, target_indices = get_video_indices(url, target, MIN_DISTANCE = distance)
+    lims, D, I, hash_vectors = compare_videos(hash_vectors, target_indices, MIN_DISTANCE = distance)
+
+    target = [(lims[i+1]-lims[i]) * [i] for i in range(hash_vectors.shape[0])]
+    target_s = [i/FPS for j in target for i in j]
+    source_s = [i/FPS for i in I]
+
+    # Make df
+    df = pd.DataFrame(zip(target_s, source_s, D, I), columns = ['TARGET_S', 'SOURCE_S', 'DISTANCE', 'INDICES'])
+    if vanilla_df:
+        return df
+        
+    # Minimum distance dataframe ----
+    # Group by X so for every second/x there will be 1 value of Y in the end
+    # index_min_distance = df.groupby('TARGET_S')['DISTANCE'].idxmin()
+    # df_min = df.loc[index_min_distance]
+    # df_min
+    # -------------------------------
+
+    df['TARGET_WEIGHT'] = 1 - df['DISTANCE']/distance # Higher value means a better match    
+    df['SOURCE_WEIGHTED_VALUE'] = df['SOURCE_S'] * df['TARGET_WEIGHT'] # Multiply the weight (which indicates a better match) with the value for Y and aggregate to get a less noisy estimate of Y
+
+    # Group by X so for every second/x there will be 1 value of Y in the end
+    grouped_X = df.groupby('TARGET_S').agg({'SOURCE_WEIGHTED_VALUE' : 'sum', 'TARGET_WEIGHT' : 'sum'})
+    grouped_X['FINAL_SOURCE_VALUE'] = grouped_X['SOURCE_WEIGHTED_VALUE'] / grouped_X['TARGET_WEIGHT'] 
+
+    # Remake the dataframe
+    df = grouped_X.reset_index()
+    df = df.drop(columns=['SOURCE_WEIGHTED_VALUE', 'TARGET_WEIGHT'])
+    df = df.rename({'FINAL_SOURCE_VALUE' : 'SOURCE_S'}, axis='columns')
+
+    # Add NAN to "missing" x values (base it off hash vector, not target_s)
+    step_size = 1/FPS
+    x_complete =  np.round(np.arange(start=0.0, stop = max(df['TARGET_S'])+step_size, step = step_size), 1) # More robust    
+    df['TARGET_S'] = np.round(df['TARGET_S'], 1)
+    df_complete = pd.DataFrame(x_complete, columns=['TARGET_S'])
+
+    # Merge dataframes to get NAN values for every missing SOURCE_S
+    df = df_complete.merge(df, on='TARGET_S', how='left')
+
+    # Interpolate between frames since there are missing values
+    df['SOURCE_LIP_S'] = df['SOURCE_S'].interpolate(method='linear', limit_direction='both', axis=0)
+   
+    # Add timeshift col and timeshift col with Linearly Interpolated Values
+    df['TIMESHIFT'] = df['SOURCE_S'].shift(1) - df['SOURCE_S']
+    df['TIMESHIFT_LIP'] = df['SOURCE_LIP_S'].shift(1) - df['SOURCE_LIP_S']
+
+    # Add Offset col that assumes the video is played at the same speed as the other to do a "timeshift"
+    df['OFFSET'] = df['SOURCE_S'] - df['TARGET_S'] - np.min(df['SOURCE_S'])
+    df['OFFSET_LIP'] = df['SOURCE_LIP_S'] - df['TARGET_S'] - np.min(df['SOURCE_LIP_S'])
+    
+    # Add time column for plotting
+    df['time'] = pd.to_datetime(df["TARGET_S"], unit='s') # Needs a datetime as input
+    return df
