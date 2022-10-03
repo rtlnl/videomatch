@@ -6,3 +6,4 @@ faiss-cpu==1.7.2
 Pillow==9.2.0
 kats==0.2.0
 seaborn==0.12.0
+scipy==1.7.3
