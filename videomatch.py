@@ -7,11 +7,13 @@ from kats.detectors.cusum_detection import CUSUMDetector
 from kats.detectors.robust_stat_detection import RobustStatDetector
 from kats.consts import TimeSeriesData
 
+from scipy import stats as st
+
 import numpy as np
 import pandas as pd
 
 from videohash import compute_hashes, filepath_from_url
-from config import FPS, MIN_DISTANCE, MAX_DISTANCE
+from config import FPS, MIN_DISTANCE, MAX_DISTANCE, ROLLING_WINDOW_SIZE
 
 def index_hashes_for_video(url: str) -> faiss.IndexBinaryIVF:
     """ Compute hashes of a video and index the video using faiss indices and return the index. """
@@ -79,6 +81,7 @@ def get_decent_distance(filepath, target, MIN_DISTANCE, MAX_DISTANCE):
     
 def get_change_points(df, smoothing_window_size=10, method='CUSUM'):
     tsd = TimeSeriesData(df.loc[:,['time','OFFSET_LIP']])
+    # tsd = TimeSeriesData(df.loc[:,['time','ROLL_OFFSET_MODE']])
     if method.upper() == "CUSUM":
         detector = CUSUMDetector(tsd)
     elif method.upper() == "ROBUST":
@@ -93,7 +96,7 @@ def get_change_points(df, smoothing_window_size=10, method='CUSUM'):
         print(f"Video jumps {jump_s:.1f}s in time at {mean_offset_prechange:.1f} seconds")
     return change_points
 
-def get_videomatch_df(url, target, min_distance=MIN_DISTANCE, vanilla_df=False):
+def get_videomatch_df(url, target, min_distance=MIN_DISTANCE, window_size=ROLLING_WINDOW_SIZE, vanilla_df=False):
     distance = get_decent_distance(url, target, MIN_DISTANCE, MAX_DISTANCE)
     _, hash_vectors = get_video_index(url)
     target_index, _ = get_video_index(target)
@@ -147,6 +150,9 @@ def get_videomatch_df(url, target, min_distance=MIN_DISTANCE, vanilla_df=False):
     df['OFFSET'] = df['SOURCE_S'] - df['TARGET_S'] - np.min(df['SOURCE_S'])
     df['OFFSET_LIP'] = df['SOURCE_LIP_S'] - df['TARGET_S'] - np.min(df['SOURCE_LIP_S'])
     
+    # Add rolling window mode
+    df['ROLL_OFFSET_MODE'] = np.round(df['OFFSET_LIP'], 0).rolling(window_size, center=True, min_periods=1).apply(lambda x: st.mode(x)[0])
+
     # Add time column for plotting
     df['time'] = pd.to_datetime(df["TARGET_S"], unit='s') # Needs a datetime as input
     return df

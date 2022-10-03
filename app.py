@@ -31,8 +31,8 @@ def get_auto_comparison(url, target, smoothing_window_size=10, method="CUSUM"):
     # fig = plot_comparison(lims, D, I, hash_vectors, MIN_DISTANCE = distance)
     df = get_videomatch_df(url, target, min_distance=MIN_DISTANCE, vanilla_df=False)
     change_points = get_change_points(df, smoothing_window_size=smoothing_window_size, method=method)
-    fig = plot_segment_comparison(df, change_points)
-    return fig
+    fig, segment_decisions = plot_segment_comparison(df, change_points)
+    return fig, segment_decisions
 
 def get_auto_edit_decision(url, target, smoothing_window_size=10):
     """ Function for Gradio to combine all helper functions"""
@@ -74,8 +74,8 @@ compare_iface = gr.Interface(fn=get_comparison,
                      examples=[[x, video_urls[-1]] for x in video_urls[:-1]])
 
 auto_compare_iface = gr.Interface(fn=get_auto_comparison,
-                     inputs=["text", "text", gr.Slider(1, 50, 10, step=1), gr.Dropdown(choices=["CUSUM", "Robust"], value="Robust")], 
-                     outputs="plot", 
+                     inputs=["text", "text", gr.Slider(2, 50, 10, step=1), gr.Dropdown(choices=["CUSUM", "Robust"], value="Robust")], 
+                     outputs=["plot", "json"], 
                      examples=[[x, video_urls[-1]] for x in video_urls[:-1]])
 
 iface = gr.TabbedInterface([auto_compare_iface, compare_iface, index_iface,], ["AutoCompare", "Compare", "Index"])
