@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+from scipy import stats as st
 
 from config import FPS
 
@@ -70,18 +71,18 @@ def add_seconds_to_datetime64(datetime64, seconds, subtract=False):
 
 def plot_segment_comparison(df, change_points):
     """ From the dataframe plot the current set of plots, where the bottom right is most indicative """
-    fig, ax_arr = plt.subplots(2, 2, figsize=(12, 4), dpi=100, sharex=True)
-    sns.scatterplot(data = df, x='time', y='SOURCE_S', ax=ax_arr[0,0])
-    sns.lineplot(data = df, x='time', y='SOURCE_LIP_S', ax=ax_arr[0,1])
+    fig, ax_arr = plt.subplots(2, 1, figsize=(16, 6), dpi=100, sharex=True)
+    sns.scatterplot(data = df, x='time', y='SOURCE_S', ax=ax_arr[0])
+    # sns.lineplot(data = df, x='time', y='SOURCE_LIP_S', ax=ax_arr[0,1])
 
     # Plot change point as lines 
-    sns.lineplot(data = df, x='time', y='OFFSET_LIP', ax=ax_arr[1,0])
-    sns.lineplot(data = df, x='time', y='OFFSET_LIP', ax=ax_arr[1,1])
+    # sns.lineplot(data = df, x='time', y='OFFSET_LIP', ax=ax_arr[1,0])
+    sns.lineplot(data = df, x='time', y='OFFSET_LIP', ax=ax_arr[1])
     timestamps = change_points_to_segments(df, change_points) 
 
     # To plot the detected segment lines 
     for x in timestamps:
-        plt.vlines(x=x, ymin=np.min(df['OFFSET_LIP']), ymax=np.max(df['OFFSET_LIP']), colors='black', lw=2)
+        plt.vlines(x=x, ymin=np.min(df['OFFSET_LIP']), ymax=np.max(df['OFFSET_LIP']), colors='black', lw=2, alpha=0.5)
         rand_y_pos = np.random.uniform(low=np.min(df['OFFSET_LIP']), high=np.max(df['OFFSET_LIP']), size=None)
 
     # To get each detected segment and their mean?
@@ -94,26 +95,34 @@ def plot_segment_comparison(df, change_points):
         # Cut out the segment between the segment lines 
         segment = df[(df['time'] > start_time) & (df['time'] < end_time)] # Not offset LIP
         segment_no_nan = segment[~np.isnan(segment['OFFSET'])] # Remove NaNs
-        seg_mean = np.mean(segment_no_nan['OFFSET'])
+        segment_offsets = segment_no_nan['OFFSET'] # np.round(segment_no_nan['OFFSET'], 1)
+        # segment_offsets = np.round(segment_no_nan['OFFSET'], 0)
+        
+        # Calculate mean/median/mode
+        # seg_sum_stat = np.mean(segment_offsets)
+        # seg_sum_stat = np.median(segment_offsets)
+        seg_sum_stat = st.mode(segment_offsets)[0][0]
 
-         # Get average difference from mean of the segment to see if it is a "straight line" or not 
-        # segment_no_nan = segment['OFFSET'][~np.isnan(segment['OFFSET'])] # Remove NaNs
-        average_diff = np.mean(np.abs(segment_no_nan['OFFSET'] - seg_mean))
+        # Get average difference from mean/median/mode of the segment to see if it is a "straight line" or not 
+        average_diff = np.mean(np.abs(segment_offsets - seg_sum_stat))
         
         # If the time where the segment comes from (origin time) is close to the start_time, it's a "good match", so no editing
-        prefix = "GOOD" if average_diff < threshold_diff else "BAD"
-        origin_time = add_seconds_to_datetime64(start_time, seg_mean + add_offset)
-        # prefix = "BAD"
-        # if (start_time < add_seconds_to_datetime64(origin_time, threshold) and (start_time > add_seconds_to_datetime64(origin_time, threshold, subtract=True))):
-        #     prefix = "GOOD"
+        noisy = False if average_diff < threshold_diff else True
+        origin_time = add_seconds_to_datetime64(start_time, seg_sum_stat + add_offset)
 
         # Plot green for a confident prediction (straight line), red otherwise
-        if prefix == "GOOD":
-            plt.text(x=start_time, y=seg_mean, s=str(np.round(average_diff, 1)), color='g', rotation=-0.0, fontsize=14)   
+        if not noisy:
+            # Plot estimated straight line
+            plt.hlines(y=seg_sum_stat, xmin=start_time, xmax=end_time, color='green', lw=3, alpha=0.5)
+            plt.text(x=start_time, y=seg_sum_stat, s=str(np.round(average_diff, 1)), color='green', rotation=-0.0, fontsize=14)   
         else:
-            plt.text(x=start_time, y=seg_mean, s=str(np.round(average_diff, 1)), color='r', rotation=-0.0, fontsize=14)   
+            # Plot estimated straight line
+            plt.hlines(y=seg_sum_stat, xmin=start_time, xmax=end_time, color='red', lw=3, alpha=0.5)
+            plt.text(x=start_time, y=seg_sum_stat, s=str(np.round(average_diff, 1)), color='red', rotation=-0.0, fontsize=14)
+
         
-        print(f"[{prefix}] DIFF={average_diff:.1f} MEAN={seg_mean:.1f} {start_time} -> {end_time} comes from video X, from {origin_time}")
+        
+        # print(f"DIFF={average_diff:.1f} SUMSTAT={seg_sum_stat:.1f} {start_time} -> {end_time} comes from video X, from {origin_time}")
 
 
     # Return figure
