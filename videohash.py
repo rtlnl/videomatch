@@ -18,6 +18,7 @@ def filepath_from_url(url):
 
 def download_video_from_url(url):
     """Download video from url or return md5 hash as video name"""
+    # TODO: Make work for Google link
     filepath = filepath_from_url(url)
     if not os.path.exists(filepath):
         with (urllib.request.urlopen(url)) as f, open(filepath, 'wb') as fileout:

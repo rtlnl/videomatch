@@ -69,29 +69,25 @@ def add_seconds_to_datetime64(datetime64, seconds, subtract=False):
         return datetime64 - np.timedelta64(int(s), 's') - np.timedelta64(int(m * 1000), 'ms')
     return datetime64 + np.timedelta64(int(s), 's') + np.timedelta64(int(m * 1000), 'ms')
 
-def plot_segment_comparison(df, change_points):
+def plot_segment_comparison(df, change_points, video_id="Placeholder_Video_ID"):
     """ From the dataframe plot the current set of plots, where the bottom right is most indicative """
     fig, ax_arr = plt.subplots(3, 1, figsize=(16, 6), dpi=100, sharex=True)
-    # sns.scatterplot(data = df, x='time', y='SOURCE_S', ax=ax_arr[0])
+    
+    # Plot original datapoints without linear interpolation, offset by target video time 
     sns.scatterplot(data = df, x='time', y='OFFSET', ax=ax_arr[0], label="OFFSET", alpha=0.5)
-    # sns.lineplot(data = df, x='time', y='SOURCE_LIP_S', ax=ax_arr[0,1])
-
-    # Get rolling average offset
-    # window_size = 30
-    # df['ROLL_OFFSET'] = df['OFFSET_LIP'].rolling(window_size, center=False, min_periods=1).median()
-    # df['ROLL_OFFSET'] = df['OFFSET_LIP'].rolling(window_size, center=False, min_periods=1).apply(lambda x: st.mode(x)[0])
-    metric = 'ROLL_OFFSET_MODE' #'OFFSET'
-    sns.scatterplot(data = df, x='time', y=metric, ax=ax_arr[1], label=metric, alpha=0.5)
 
     # Plot linearly interpolated values
-    sns.lineplot(data = df, x='time', y='OFFSET_LIP', ax=ax_arr[1], label="OFFSET_LIP")
+    sns.lineplot(data = df, x='time', y='OFFSET_LIP', ax=ax_arr[1], label="OFFSET_LIP", color='orange')
 
-    # Plot change point as lines
-    
-    # sns.lineplot(data = df, x='time', y='OFFSET_LIP', ax=ax_arr[1,0])
+    # Plot our target metric wherer
+    metric = 'ROLL_OFFSET_MODE' # 'OFFSET'
+    sns.scatterplot(data = df, x='time', y=metric, ax=ax_arr[1], label=metric, alpha=0.5)
+
+    # Plot deteected change points as lines which will indicate the segments
     sns.scatterplot(data = df, x='time', y=metric, ax=ax_arr[2], label=metric, s=20)
     timestamps = change_points_to_segments(df, change_points) 
 
+    # To store "decisions" about segments  
     segment_decisions = {}
     seg_i = 0
 
@@ -99,20 +95,16 @@ def plot_segment_comparison(df, change_points):
     for x in timestamps:
         plt.vlines(x=x, ymin=np.min(df[metric]), ymax=np.max(df[metric]), colors='black', lw=2, alpha=0.5)
 
-    # To get each detected segment and their mean?
-    threshold_diff = 1.5 # Average diff threshold 
-    # threshold = 3.0 # s diff threshold
+    threshold_diff = 1.5 # Average segment difference threshold for plotting
     for start_time, end_time in zip(timestamps[:-1], timestamps[1:]):
 
-        # add_offset = df.iloc[0]['SOURCE_S'] # np.min(df['SOURCE_S'])
+        # Time to add to each origin time to get the correct time back since it is offset by add_offset
         add_offset = np.min(df['SOURCE_S'])
         
         # Cut out the segment between the segment lines
         segment = df[(df['time'] > start_time) & (df['time'] < end_time)] # Not offset LIP
         segment_no_nan = segment[~np.isnan(segment[metric])] # Remove NaNs
         segment_offsets = segment_no_nan[metric] # np.round(segment_no_nan['OFFSET'], 1)
-        # segment_offsets = np.round(segment_no_nan['OFFSET'], 0)
-        # print(segment_offsets)
         
         # Calculate mean/median/mode
         # seg_sum_stat = np.mean(segment_offsets)
@@ -120,7 +112,8 @@ def plot_segment_comparison(df, change_points):
         seg_sum_stat = st.mode(segment_offsets)[0][0]
 
         # Get average difference from mean/median/mode of the segment to see if it is a "straight line" or not 
-        average_diff = np.median(np.abs(segment_offsets - seg_sum_stat))
+        average_diff = np.median(np.abs(segment_no_nan['OFFSET_LIP'] - seg_sum_stat))
+        average_offset = np.mean(segment_no_nan['OFFSET_LIP'])
         
         # If the time where the segment comes from (origin time) is close to the start_time, it's a "good match", so no editing
         noisy = False if average_diff < threshold_diff else True
@@ -142,17 +135,17 @@ def plot_segment_comparison(df, change_points):
         end_time_str = pd.to_datetime(end_time).strftime('%H:%M:%S')
         origin_start_time_str = pd.to_datetime(origin_start_time).strftime('%H:%M:%S')
         origin_end_time_str = pd.to_datetime(origin_end_time).strftime('%H:%M:%S')
-        video_id = "placeholder_video_id"
-
         decision = {"Target Start Time" : start_time_str,
                     "Target End Time" : end_time_str,
                     "Source Start Time" : origin_start_time_str,
                     "Source End Time" : origin_end_time_str,
-                    "Video ID" : video_id,
-                    "Explanation" : f"{start_time_str} -> {end_time_str} comes from video {video_id} from {origin_start_time_str} -> {origin_end_time_str}"}
+                    "Source Video ID" : video_id,
+                    "Uncertainty" : np.round(average_diff, 3),
+                    "Average Offset in Seconds" : np.round(average_offset, 3),
+                    "Explanation" : f"{start_time_str} -> {end_time_str} comes from video with ID '{video_id}' from {origin_start_time_str} -> {origin_end_time_str}"}
         segment_decisions[f'Segment {seg_i}'] = decision 
         seg_i += 1
-        print(decision)
+        # print(decision)
 
     # Return figure
     plt.xticks(rotation=90)

@@ -79,9 +79,8 @@ def get_decent_distance(filepath, target, MIN_DISTANCE, MAX_DISTANCE):
     logging.warning(f"No matches found for any distance between {MIN_DISTANCE} and {MAX_DISTANCE}")
     return None        
     
-def get_change_points(df, smoothing_window_size=10, method='CUSUM'):
-    tsd = TimeSeriesData(df.loc[:,['time','OFFSET_LIP']])
-    # tsd = TimeSeriesData(df.loc[:,['time','ROLL_OFFSET_MODE']])
+def get_change_points(df, smoothing_window_size=10, method='CUSUM', metric="OFFSET_LIP"):
+    tsd = TimeSeriesData(df.loc[:,['time', metric]])
     if method.upper() == "CUSUM":
         detector = CUSUMDetector(tsd)
     elif method.upper() == "ROBUST":

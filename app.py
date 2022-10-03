@@ -19,7 +19,7 @@ def get_comparison(url, target, MIN_DISTANCE = 4):
     fig = plot_comparison(lims, D, I, hash_vectors, MIN_DISTANCE = MIN_DISTANCE)
     return fig
 
-def get_auto_comparison(url, target, smoothing_window_size=10, method="CUSUM"):
+def get_auto_comparison(url, target, smoothing_window_size=10, metric="OFFSET_LIP"):
     """ Function for Gradio to combine all helper functions"""
     distance = get_decent_distance(url, target, MIN_DISTANCE, MAX_DISTANCE)
     if distance == None:
@@ -27,34 +27,14 @@ def get_auto_comparison(url, target, smoothing_window_size=10, method="CUSUM"):
         raise gr.Error("No matches found!")
     video_index, hash_vectors = get_video_index(url)
     target_index, _ = get_video_index(target)
-    lims, D, I, hash_vectors = compare_videos(hash_vectors, target_index, MIN_DISTANCE = distance)
-    # fig = plot_comparison(lims, D, I, hash_vectors, MIN_DISTANCE = distance)
-    df = get_videomatch_df(url, target, min_distance=MIN_DISTANCE, vanilla_df=False)
-    change_points = get_change_points(df, smoothing_window_size=smoothing_window_size, method=method)
-    fig, segment_decisions = plot_segment_comparison(df, change_points)
+
+    # For each video do...
+    for i in range(0, 1):
+        lims, D, I, hash_vectors = compare_videos(hash_vectors, target_index, MIN_DISTANCE = distance)
+        df = get_videomatch_df(url, target, min_distance=MIN_DISTANCE, vanilla_df=False)
+        change_points = get_change_points(df, smoothing_window_size=smoothing_window_size, method="ROBUST", metric=metric)
+        fig, segment_decisions = plot_segment_comparison(df, change_points, target)
     return fig, segment_decisions
-
-def get_auto_edit_decision(url, target, smoothing_window_size=10):
-    """ Function for Gradio to combine all helper functions"""
-    distance = get_decent_distance(url, target, MIN_DISTANCE, MAX_DISTANCE)
-    if distance == None:
-        return None
-        raise gr.Error("No matches found!")
-    video_index, hash_vectors = get_video_index(url)
-    target_index, _ = get_video_index(target)
-    lims, D, I, hash_vectors = compare_videos(hash_vectors, target_index, MIN_DISTANCE = distance)
-    
-    df = get_videomatch_df(url, target, min_distance=MIN_DISTANCE, vanilla_df=False)
-    change_points = get_change_points(df, smoothing_window_size=smoothing_window_size, method="ROBUST")
-    edit_decision_list = []
-    for cp in change_points:
-        decision = f"Video at time {cp.start_time} returns {cp.metric}"
-        # edit_decision_list.append(f"Video at time {cp.start_time} returns {cp.metric}")
-
-        
-    fig = plot_multi_comparison(df, change_points)
-    return fig
-
     
 
 video_urls = ["https://www.dropbox.com/s/8c89a9aba0w8gjg/Ploumen.mp4?dl=1",
@@ -74,7 +54,10 @@ compare_iface = gr.Interface(fn=get_comparison,
                      examples=[[x, video_urls[-1]] for x in video_urls[:-1]])
 
 auto_compare_iface = gr.Interface(fn=get_auto_comparison,
-                     inputs=["text", "text", gr.Slider(2, 50, 10, step=1), gr.Dropdown(choices=["CUSUM", "Robust"], value="Robust")], 
+                     inputs=["text", 
+                            "text", 
+                            gr.Slider(2, 50, 10, step=1), 
+                            gr.Dropdown(choices=["OFFSET_LIP", "ROLL_OFFSET_MODE"], value="OFFSET_LIP")], 
                      outputs=["plot", "json"], 
                      examples=[[x, video_urls[-1]] for x in video_urls[:-1]])
 
