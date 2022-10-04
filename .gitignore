@@ -130,3 +130,6 @@ dmypy.json
 
 # Gradio
 gradio_cached_examples/
+
+# MacOS
+.DS_Store
