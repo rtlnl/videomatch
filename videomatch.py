@@ -15,11 +15,11 @@ import pandas as pd
 from videohash import compute_hashes, filepath_from_url
 from config import FPS, MIN_DISTANCE, MAX_DISTANCE, ROLLING_WINDOW_SIZE
 
-def get_target_urls(json_file='apb2022.json'):
-    """ Obtain target urls for the target videos of a json file containing .mp4 files """
-    with open('apb2022.json', "r") as json_file:
-        target_videos = json.load(json_file)
-        return [video['mp4'] for video in target_videos]
+# def get_target_urls(json_file='apb2022.json'):
+#     """ Obtain target urls for the target videos of a json file containing .mp4 files """
+#     with open('apb2022.json', "r") as json_file:
+#         target_videos = json.load(json_file)
+#         return [video['mp4'] for video in target_videos]
 
 def index_hashes_for_video(url: str) -> faiss.IndexBinaryIVF:
     """ Compute hashes of a video and index the video using faiss indices and return the index. """
@@ -86,7 +86,8 @@ def get_decent_distance(video_index, hash_vectors, target_index, MIN_DISTANCE, M
         _, D, _, _ = compare_videos(hash_vectors, target_index, MIN_DISTANCE = distance)
         nr_source_frames = video_index.ntotal
         nr_matches = len(D)
-        logging.info(f"{(nr_matches/nr_source_frames) * 100.0:.1f}% of frames have a match for distance '{distance}' ({nr_matches} matches for {nr_source_frames} frames)")
+        if nr_matches > 0:
+            logging.info(f"{(nr_matches/nr_source_frames) * 100.0:.1f}% of frames have a match for distance '{distance}' ({nr_matches} matches for {nr_source_frames} frames)")
         if nr_matches >= nr_source_frames:
             return distance  
     logging.warning(f"No matches found for any distance between {MIN_DISTANCE} and {MAX_DISTANCE}")

@@ -69,7 +69,7 @@ def add_seconds_to_datetime64(datetime64, seconds, subtract=False):
         return datetime64 - np.timedelta64(int(s), 's') - np.timedelta64(int(m * 1000), 'ms')
     return datetime64 + np.timedelta64(int(s), 's') + np.timedelta64(int(m * 1000), 'ms')
 
-def plot_segment_comparison(df, change_points, video_id="Placeholder_Video_ID", threshold_diff = 1.5):
+def plot_segment_comparison(df, change_points, video_mp4 = "Placeholder.mp4", video_id="Placeholder.videoID", threshold_diff = 1.5):
     """ Based on the dataframe and detected change points do two things:
     1. Make a decision on where each segment belongs in time and return that info as a list of dicts
     2. Plot how this decision got made as an informative plot
@@ -138,18 +138,16 @@ def plot_segment_comparison(df, change_points, video_id="Placeholder_Video_ID", 
             plt.text(x=start_time, y=seg_sum_stat, s=str(np.round(average_diff, 1)), color='red', rotation=-0.0, fontsize=14)
         
         # Decisions about segments
-        start_time_str = pd.to_datetime(start_time).strftime('%H:%M:%S')
-        end_time_str = pd.to_datetime(end_time).strftime('%H:%M:%S')
-        origin_start_time_str = pd.to_datetime(origin_start_time).strftime('%H:%M:%S')
-        origin_end_time_str = pd.to_datetime(origin_end_time).strftime('%H:%M:%S')
-        decision = {"Target Start Time" : start_time_str,
-                    "Target End Time" : end_time_str,
-                    "Source Start Time" : origin_start_time_str,
-                    "Source End Time" : origin_end_time_str,
+        decision = {"Target Start Time" : pd.to_datetime(start_time).strftime('%H:%M:%S'),
+                    "Target End Time" : pd.to_datetime(end_time).strftime('%H:%M:%S'),
+                    "Source Start Time" : pd.to_datetime(origin_start_time).strftime('%H:%M:%S'),
+                    "Source End Time" : pd.to_datetime(origin_end_time).strftime('%H:%M:%S'),
                     "Source Video ID" : video_id,
+                    "Source Video .mp4" : video_mp4,
                     "Uncertainty" : np.round(average_diff, 3),
                     "Average Offset in Seconds" : np.round(average_offset, 3),
-                    "Explanation" : f"{start_time_str} -> {end_time_str} comes from video with ID={video_id} from {origin_start_time_str} -> {origin_end_time_str}"}
+                    # "Explanation" : f"{start_time_str} -> {end_time_str} comes from video with ID={video_id} from {origin_start_time_str} -> {origin_end_time_str}",
+                    }
         segment_decisions.append(decision) 
         seg_i += 1
         # print(decision)
