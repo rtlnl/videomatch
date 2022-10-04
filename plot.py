@@ -88,7 +88,7 @@ def plot_segment_comparison(df, change_points, video_id="Placeholder_Video_ID"):
     timestamps = change_points_to_segments(df, change_points) 
 
     # To store "decisions" about segments  
-    segment_decisions = {}
+    segment_decisions = []
     seg_i = 0
 
     # To plot the detected segment lines 
@@ -142,8 +142,8 @@ def plot_segment_comparison(df, change_points, video_id="Placeholder_Video_ID"):
                     "Source Video ID" : video_id,
                     "Uncertainty" : np.round(average_diff, 3),
                     "Average Offset in Seconds" : np.round(average_offset, 3),
-                    "Explanation" : f"{start_time_str} -> {end_time_str} comes from video with ID '{video_id}' from {origin_start_time_str} -> {origin_end_time_str}"}
-        segment_decisions[f'Segment {seg_i}'] = decision 
+                    "Explanation" : f"{start_time_str} -> {end_time_str} comes from video with ID={video_id} from {origin_start_time_str} -> {origin_end_time_str}"}
+        segment_decisions.append(decision) 
         seg_i += 1
         # print(decision)
 

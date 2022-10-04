@@ -63,14 +63,21 @@ def compare_videos(hash_vectors, target_index, MIN_DISTANCE = 3):
     lims, D, I = target_index.range_search(hash_vectors, MIN_DISTANCE)
     return lims, D, I, hash_vectors
 
-def get_decent_distance(filepath, target, MIN_DISTANCE, MAX_DISTANCE):
+def get_decent_distance(video_index, hash_vectors, target_index, MIN_DISTANCE, MAX_DISTANCE):
     """ To get a decent heurstic for a base distance check every distance from MIN_DISTANCE to MAX_DISTANCE
-    until the number of matches found is equal to or higher than the number of frames in the source video"""
+    until the number of matches found is equal to or higher than the number of frames in the source video
+    
+    args:
+        - video_index: The index of the source video
+        - hash_vectors: The hash vectors of the target video
+        - target_index: The index of the target video 
+        """
     for distance in np.arange(start = MIN_DISTANCE - 2, stop = MAX_DISTANCE + 2, step = 2, dtype=int):
         distance = int(distance)
-        video_index, hash_vectors = get_video_index(filepath)
-        target_index, _ = get_video_index(target)
-        lims, D, I, hash_vectors = compare_videos(hash_vectors, target_index, MIN_DISTANCE = distance)
+        # --- Previously --- 
+        # video_index, hash_vectors = get_video_index(filepath)
+        # target_index, _ = get_video_index(target)
+        _, D, _, _ = compare_videos(hash_vectors, target_index, MIN_DISTANCE = distance)
         nr_source_frames = video_index.ntotal
         nr_matches = len(D)
         logging.info(f"{(nr_matches/nr_source_frames) * 100.0:.1f}% of frames have a match for distance '{distance}' ({nr_matches} matches for {nr_source_frames} frames)")
@@ -79,7 +86,7 @@ def get_decent_distance(filepath, target, MIN_DISTANCE, MAX_DISTANCE):
     logging.warning(f"No matches found for any distance between {MIN_DISTANCE} and {MAX_DISTANCE}")
     return None        
     
-def get_change_points(df, smoothing_window_size=10, method='CUSUM', metric="OFFSET_LIP"):
+def get_change_points(df, smoothing_window_size=10, method='ROBUST', metric="ROLL_OFFSET_MODE"):
     tsd = TimeSeriesData(df.loc[:,['time', metric]])
     if method.upper() == "CUSUM":
         detector = CUSUMDetector(tsd)
@@ -95,11 +102,12 @@ def get_change_points(df, smoothing_window_size=10, method='CUSUM', metric="OFFS
         print(f"Video jumps {jump_s:.1f}s in time at {mean_offset_prechange:.1f} seconds")
     return change_points
 
-def get_videomatch_df(url, target, min_distance=MIN_DISTANCE, window_size=ROLLING_WINDOW_SIZE, vanilla_df=False):
-    distance = get_decent_distance(url, target, MIN_DISTANCE, MAX_DISTANCE)
-    _, hash_vectors = get_video_index(url)
-    target_index, _ = get_video_index(target)
-    lims, D, I, hash_vectors = compare_videos(hash_vectors, target_index, MIN_DISTANCE = distance)
+def get_videomatch_df(lims, D, I, hash_vectors, distance, min_distance=MIN_DISTANCE, window_size=ROLLING_WINDOW_SIZE, vanilla_df=False):
+    # --- Previously ---
+    # distance = get_decent_distance(url, target, MIN_DISTANCE, MAX_DISTANCE)
+    # _, hash_vectors = get_video_index(url)
+    # target_index, _ = get_video_index(target)
+    # lims, D, I, hash_vectors = compare_videos(hash_vectors, target_index, MIN_DISTANCE = distance)
 
     target = [(lims[i+1]-lims[i]) * [i] for i in range(hash_vectors.shape[0])]
     target_s = [i/FPS for j in target for i in j]
@@ -109,14 +117,8 @@ def get_videomatch_df(url, target, min_distance=MIN_DISTANCE, window_size=ROLLIN
     df = pd.DataFrame(zip(target_s, source_s, D, I), columns = ['TARGET_S', 'SOURCE_S', 'DISTANCE', 'INDICES'])
     if vanilla_df:
         return df
-        
-    # Minimum distance dataframe ----
-    # Group by X so for every second/x there will be 1 value of Y in the end
-    # index_min_distance = df.groupby('TARGET_S')['DISTANCE'].idxmin()
-    # df_min = df.loc[index_min_distance]
-    # df_min
-    # -------------------------------
 
+    # Weight values by distance of their match
     df['TARGET_WEIGHT'] = 1 - df['DISTANCE']/distance # Higher value means a better match    
     df['SOURCE_WEIGHTED_VALUE'] = df['SOURCE_S'] * df['TARGET_WEIGHT'] # Multiply the weight (which indicates a better match) with the value for Y and aggregate to get a less noisy estimate of Y
 
