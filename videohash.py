@@ -50,7 +50,12 @@ def binary_array_to_uint8s(arr):
     return [int(bit_string[i:i+8], 2) for i in range(0, len(bit_string), 8)]
 
 def compute_hashes(url: str, fps=FPS):
-    clip = VideoFileClip(download_video_from_url(url))
+    try:
+        clip = VideoFileClip(download_video_from_url(url))
+    except IOError:
+        logging.warn(f"Falling back to direct streaming from {url} because the downloaded video failed.")
+        clip = VideoFileClip(url)
+        
     for index, frame in enumerate(change_ffmpeg_fps(clip, fps).iter_frames()):
         # Each frame is a triplet of size (height, width, 3) of the video since it is RGB
         # The hash itself is of size (hash_size, hash_size)
