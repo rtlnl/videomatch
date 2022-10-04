@@ -1,6 +1,6 @@
 import os
 import logging
-
+import json
 import faiss
 
 from kats.detectors.cusum_detection import CUSUMDetector
@@ -14,6 +14,12 @@ import pandas as pd
 
 from videohash import compute_hashes, filepath_from_url
 from config import FPS, MIN_DISTANCE, MAX_DISTANCE, ROLLING_WINDOW_SIZE
+
+def get_target_urls(json_file='apb2022.json'):
+    """ Obtain target urls for the target videos of a json file containing .mp4 files """
+    with open('apb2022.json', "r") as json_file:
+        target_videos = json.load(json_file)
+        return [video['mp4'] for video in target_videos]
 
 def index_hashes_for_video(url: str) -> faiss.IndexBinaryIVF:
     """ Compute hashes of a video and index the video using faiss indices and return the index. """

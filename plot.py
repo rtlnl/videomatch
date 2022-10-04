@@ -69,33 +69,40 @@ def add_seconds_to_datetime64(datetime64, seconds, subtract=False):
         return datetime64 - np.timedelta64(int(s), 's') - np.timedelta64(int(m * 1000), 'ms')
     return datetime64 + np.timedelta64(int(s), 's') + np.timedelta64(int(m * 1000), 'ms')
 
-def plot_segment_comparison(df, change_points, video_id="Placeholder_Video_ID"):
-    """ From the dataframe plot the current set of plots, where the bottom right is most indicative """
-    fig, ax_arr = plt.subplots(3, 1, figsize=(16, 6), dpi=100, sharex=True)
+def plot_segment_comparison(df, change_points, video_id="Placeholder_Video_ID", threshold_diff = 1.5):
+    """ Based on the dataframe and detected change points do two things:
+    1. Make a decision on where each segment belongs in time and return that info as a list of dicts
+    2. Plot how this decision got made as an informative plot
     
+    args:
+    - df: dataframe 
+    - change_points: detected points in time where the average metric value changes
+    - video_id: the unique identifier for the video currently being compared
+    - threshold_diff: to plot which segments are likely bad matches
+    """
+    fig, ax_arr = plt.subplots(4, 1, figsize=(16, 6), dpi=300, sharex=True)
+    ax_arr[0].set_title(video_id)
+    sns.scatterplot(data = df, x='time', y='SOURCE_S', ax=ax_arr[0], label="SOURCE_S", color='blue', alpha=1.0)
+
     # Plot original datapoints without linear interpolation, offset by target video time 
-    sns.scatterplot(data = df, x='time', y='OFFSET', ax=ax_arr[0], label="OFFSET", alpha=0.5)
+    sns.scatterplot(data = df, x='time', y='OFFSET', ax=ax_arr[1], label="OFFSET", color='orange', alpha=1.0)
 
-    # Plot linearly interpolated values
-    sns.lineplot(data = df, x='time', y='OFFSET_LIP', ax=ax_arr[1], label="OFFSET_LIP", color='orange')
-
-    # Plot our target metric wherer
+    # Plot linearly interpolated values next to metric vales
     metric = 'ROLL_OFFSET_MODE' # 'OFFSET'
-    sns.scatterplot(data = df, x='time', y=metric, ax=ax_arr[1], label=metric, alpha=0.5)
+    sns.lineplot(data = df, x='time', y='OFFSET_LIP', ax=ax_arr[2], label="OFFSET_LIP", color='orange')
+    sns.scatterplot(data = df, x='time', y=metric, ax=ax_arr[2], label=metric, alpha=0.5)
 
-    # Plot deteected change points as lines which will indicate the segments
-    sns.scatterplot(data = df, x='time', y=metric, ax=ax_arr[2], label=metric, s=20)
+    # Plot detected change points as lines which will indicate the segments
+    sns.scatterplot(data = df, x='time', y=metric, ax=ax_arr[3], label=metric, s=20)
     timestamps = change_points_to_segments(df, change_points) 
-
+    for x in timestamps:
+        plt.vlines(x=x, ymin=np.min(df[metric]), ymax=np.max(df[metric]), colors='black', lw=2, alpha=0.5)
+    
     # To store "decisions" about segments  
     segment_decisions = []
     seg_i = 0
 
-    # To plot the detected segment lines 
-    for x in timestamps:
-        plt.vlines(x=x, ymin=np.min(df[metric]), ymax=np.max(df[metric]), colors='black', lw=2, alpha=0.5)
-
-    threshold_diff = 1.5 # Average segment difference threshold for plotting
+    # Average segment difference threshold for plotting
     for start_time, end_time in zip(timestamps[:-1], timestamps[1:]):
 
         # Time to add to each origin time to get the correct time back since it is offset by add_offset
@@ -150,3 +157,5 @@ def plot_segment_comparison(df, change_points, video_id="Placeholder_Video_ID"):
     # Return figure
     plt.xticks(rotation=90)
     return fig, segment_decisions
+
+    
