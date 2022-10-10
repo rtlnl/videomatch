@@ -5,5 +5,5 @@ VIDEO_DIRECTORY = tempfile.gettempdir()
 
 FPS = 5
 MIN_DISTANCE = 4
-MAX_DISTANCE = 30 # Used to be 30
+MAX_DISTANCE = 50 # Used to be 30
 ROLLING_WINDOW_SIZE = 10

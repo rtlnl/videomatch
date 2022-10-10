@@ -7,6 +7,7 @@ import hashlib
 from PIL import Image
 import imagehash
 from moviepy.editor import VideoFileClip
+from moviepy.video.fx.all import crop
 import numpy as np  
 
 from config import FPS, VIDEO_DIRECTORY
@@ -41,6 +42,13 @@ def change_ffmpeg_fps(clip, fps=FPS):
     clip.reader.lastread = clip.reader.read_frame()
     return clip
 
+def crop_video(clip, crop_percentage=0.75, w=224, h=224):
+    # Original width and height- which combined with crop_percentage determines the size of the new video
+    ow, oh = clip.size 
+
+    logging.info(f"Cropping and resizing video to ({w}, {h})")
+    return crop(clip, x_center=ow/2, y_center=oh/2, width=int(ow*crop_percentage), height=int(crop_percentage*oh)).resize((w,h))
+
 def compute_hash(frame, hash_size=16):
     image = Image.fromarray(np.array(frame))
     return imagehash.phash(image, hash_size)
@@ -51,10 +59,11 @@ def binary_array_to_uint8s(arr):
 
 def compute_hashes(url: str, fps=FPS):
     try:
-        clip = VideoFileClip(download_video_from_url(url))
+        filepath = download_video_from_url(url)
+        clip = crop_video(VideoFileClip(filepath))
     except IOError:
         logging.warn(f"Falling back to direct streaming from {url} because the downloaded video failed.")
-        clip = VideoFileClip(url)
+        clip = crop_video(VideoFileClip(url))
         
     for index, frame in enumerate(change_ffmpeg_fps(clip, fps).iter_frames()):
         # Each frame is a triplet of size (height, width, 3) of the video since it is RGB
