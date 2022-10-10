@@ -3,12 +3,14 @@ import urllib.request
 import shutil
 import logging
 import hashlib
+import time
 
 from PIL import Image
 import imagehash
 from moviepy.editor import VideoFileClip
 from moviepy.video.fx.all import crop
-import numpy as np  
+import numpy as np
+from pytube import YouTube
 
 from config import FPS, VIDEO_DIRECTORY
 
@@ -19,12 +21,26 @@ def filepath_from_url(url):
 
 def download_video_from_url(url):
     """Download video from url or return md5 hash as video name"""
-    # TODO: Make work for Google link
+    start = time.time()
     filepath = filepath_from_url(url)
+
+    # Check if it exists already
     if not os.path.exists(filepath):
+        # For YouTube links
+        if url.startswith('https://www.youtube.com') or url.startswith('youtube.com') or url.startswith('http://www.youtube.com'):
+            file_dir = '/'.join(x for x in filepath.split('/')[:-1])
+            filename = filepath.split('/')[-1]
+            logging.info(f"file_dir = {file_dir}")
+            logging.info(f"filename = {filename}")
+            YouTube(url).streams.get_highest_resolution().download(file_dir, skip_existing = False, filename = filename)
+            logging.info(f"Downloaded YouTube video from {url} to {filepath} in {time.time() - start:.1f} seconds.")
+            return filepath
+
+        # Works for basically all links, except youtube 
         with (urllib.request.urlopen(url)) as f, open(filepath, 'wb') as fileout:
-            shutil.copyfileobj(f, fileout, length=16*1024)
-        logging.info(f"Downloaded video from {url} to {filepath}.")
+            logging.info(f"Starting copyfileobj on {f}")
+            shutil.copyfileobj(f, fileout, length=16*1024*1024)
+        logging.info(f"Downloaded video from {url} to {filepath} in {time.time() - start:.1f} seconds.")
     else:
         logging.info(f"Skipping downloading from {url} because {filepath} already exists.")
     return filepath
