@@ -1,6 +1,5 @@
 import os
 import logging
-import json
 import faiss
 
 from kats.detectors.cusum_detection import CUSUMDetector
@@ -13,7 +12,7 @@ import numpy as np
 import pandas as pd
 
 from videohash import compute_hashes, filepath_from_url
-from config import FPS, MIN_DISTANCE, MAX_DISTANCE, ROLLING_WINDOW_SIZE
+from config import FPS, ROLLING_WINDOW_SIZE
 
 def index_hashes_for_video(url: str) -> faiss.IndexBinaryIVF:
     """ Compute hashes of a video and index the video using faiss indices and return the index. 
@@ -92,7 +91,7 @@ def compare_videos(hash_vectors, target_index, MIN_DISTANCE = 3):
         D (ndarray): distances of the vectors within a radius around the query point
         I (ndarray): indices of the neighbours
         hash_vectors (ndarray): vector of the indexed frames that can be searched.
-        
+
     """
     lims, D, I = target_index.range_search(hash_vectors, MIN_DISTANCE)
     return lims, D, I, hash_vectors
