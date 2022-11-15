@@ -55,6 +55,7 @@ def plot_segment_comparison(df, change_points, video_mp4 = "Placeholder.mp4", vi
     Returns:
         fig (Figure): Figure that shows the comparison between two videos.
         segment_decisions (dict): JSON-style dictionary containing the decision information of the comparison between two videos.
+        
     """
     # Plot it with certain characteristics
     fig, ax_arr = plt.subplots(4, 1, figsize=(16, 6), dpi=300, sharex=True)
