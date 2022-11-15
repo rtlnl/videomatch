@@ -46,6 +46,7 @@ def download_video_from_url(url):
     return filepath
 
 def change_ffmpeg_fps(clip, fps=FPS):
+    """ DOCSTRING HERE """
     # Hacking the ffmpeg call based on 
     # https://github.com/Zulko/moviepy/blob/master/moviepy/video/io/ffmpeg_reader.py#L126
     import subprocess as sp
