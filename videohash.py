@@ -141,7 +141,7 @@ def compute_hashes(url: str, fps=FPS):
     Args:
         url (str): Url of the input video.
     
-    Yeilds:
+    Yields:
         ({str: int, str: ndarray}): Dict with the frame number and the corresponding hash.
     """
 
