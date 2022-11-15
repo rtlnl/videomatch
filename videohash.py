@@ -70,7 +70,7 @@ def change_ffmpeg_fps(clip, fps=FPS):
         fps (int): The desired frame rate for the clip.
 
     Returns:
-        clip (moviepy.editor.VideoFileClip): New clip with the desired.
+        clip (moviepy.editor.VideoFileClip): New clip with the desired frames per seconds.
     """
     # Hacking the ffmpeg call based on 
     # https://github.com/Zulko/moviepy/blob/master/moviepy/video/io/ffmpeg_reader.py#L126
@@ -113,7 +113,7 @@ def compute_hash(frame, hash_size=16):
         hash_size (int): Size of the required hash.
     
     Returns:
-        (ndarray): Perceptual hash of the frame of size (hash_size, hash_size)
+        (numpy.ndarray): Perceptual hash of the frame of size (hash_size, hash_size)
     """
     image = Image.fromarray(np.array(frame))
 
@@ -142,7 +142,7 @@ def compute_hashes(url: str, fps=FPS):
         url (str): Url of the input video.
     
     Yields:
-        ({str: int, str: ndarray}): Dict with the frame number and the corresponding hash.
+        ({str: int, str: numpy.ndarray}): Dict with the frame number and the corresponding hash.
     """
 
     # Try downloading the video from url. If that fails, load it directly from the url instead
