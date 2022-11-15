@@ -26,9 +26,9 @@ The video has to be input as a url, and we support the following video sources:
 - Youtube
 - Direct .mp4 download link
 
-# Example of the video factchecker
-[example-video-factchecker]:(imgs/examplefactchecker.png)
+# Example of the work in progres video factchecker site
+![examplefactchecker.png](https://s3.amazonaws.com/moonup/production/uploads/1668527555344-61dfe6a07313f246ad804cd1.png)
 
-# Example of a plot that can be produced for extra investigation
-[example-plot]:(imgs/exampleplot.png)
+# Example plot 
+![exampleplot.png](https://s3.amazonaws.com/moonup/production/uploads/1668527600178-61dfe6a07313f246ad804cd1.png)
 
