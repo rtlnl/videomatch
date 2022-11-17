@@ -123,7 +123,7 @@ with open('apb2022.json', "r") as json_file:
     TARGET_ENTRIES = json.load(json_file)
 
 # Some example videos that can be compared to
-EXAMPLE_VIDEO_URLS = ["https://www.youtube.com/watch?v=qIaqMqMweM4",
+EXAMPLE_VIDEO_URLS = [#"https://www.youtube.com/watch?v=qIaqMqMweM4",
                       "https://drive.google.com/uc?id=1Y1-ypXOvLrp1x0cjAe_hMobCEdA0UbEo&export=download",
                       "https://video.twimg.com/amplify_video/1575576025651617796/vid/480x852/jP057nPfPJSUM0kR.mp4?tag=14",
                       "https://drive.google.com/uc?id=1XW0niHR1k09vPNv1cp6NvdGXe7FHJc1D&export=download"]
@@ -154,4 +154,5 @@ if __name__ == "__main__":
     import matplotlib
     matplotlib.use('SVG')
 
-    iface.launch(show_error=True)
+    # iface.launch(show_error=True)
+    iface.launch(share=True, debug=True)
