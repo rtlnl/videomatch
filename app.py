@@ -155,5 +155,5 @@ if __name__ == "__main__":
     import matplotlib
     matplotlib.use('SVG')
 
-    # iface.launch(show_error=True)
-    iface.launch(share=True, debug=True)
+    iface.launch(show_error=True)
+    # iface.launch(share=True, debug=True)
