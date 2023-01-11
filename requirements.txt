@@ -9,3 +9,5 @@ seaborn==0.12.0
 scipy==1.7.3
 pytube==12.1.0
 pytube3==9.6.4
+# Pin older version of packaging to fix issue in kats:
+packaging==21.3 
