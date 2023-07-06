@@ -6,7 +6,7 @@ faiss-cpu==1.7.2
 Pillow==9.3.0
 kats==0.2.0
 seaborn==0.12.0
-scipy==1.7.3
+scipy==1.10.0
 pytube==12.1.0
 pytube3==9.6.4
 # Pin older version of packaging to fix issue in kats:
